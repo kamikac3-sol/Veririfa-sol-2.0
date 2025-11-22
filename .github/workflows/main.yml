@@ -11,6 +11,15 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v3
 
+      - name: Debug - Verificar archivos CSS
+        run: |
+          echo "=== Buscando archivos CSS ==="
+          find . -name "*.css" -type f
+          echo "=== Estructura de archivos ==="
+          ls -la
+          echo "=== Contenido de styles.css (primeras líneas) ==="
+          head -20 styles.css
+
       - name: Deploy to Firebase
         uses: FirebaseExtended/action-hosting-deploy@v0
         with:
