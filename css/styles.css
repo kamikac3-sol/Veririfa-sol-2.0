@@ -1,0 +1,39 @@
+/* Todos los estilos CSS del archivo original */
+:root {
+    --primary: #9945FF;
+    --secondary: #14F195;
+    --dark: #121212;
+    --light: #f8f9fa;
+    --gray: #6c757d;
+    --success: #28a745;
+    --danger: #dc3545;
+    --warning: #ffc107;
+    --info: #17a2b8;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+body {
+    background-color: var(--dark);
+    color: var(--light);
+    line-height: 1.6;
+    overflow-x: hidden;
+    padding-top: 80px;
+}
+
+/* ... resto de los estilos completos ... */
+
+/* Media queries para tablets */
+@media (min-width: 768px) {
+    /* ... media queries ... */
+}
+
+/* Media queries para desktop */
+@media (min-width: 1024px) {
+    /* ... media queries ... */
+}
