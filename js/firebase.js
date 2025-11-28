@@ -191,7 +191,7 @@ async function deleteRaffleFromFirebase(raffleId) {
     }
 }
 
-// Función para obtener estadísticas (MEJORA AÑADIDA)
+// Función para obtener estadísticas
 async function getFirebaseStats() {
     if (!db) return null;
 
@@ -263,7 +263,7 @@ async function clearTestData() {
     }
 }
 
-// Función para exportar datos (MEJORA AÑADIDA)
+// Función para exportar datos
 async function exportFirebaseData() {
     if (!db) return null;
 
@@ -299,34 +299,6 @@ async function exportFirebaseData() {
     } catch (error) {
         console.error('❌ Error exportando datos de Firebase:', error);
         return null;
-    }
-}
-
-// Función auxiliar para mostrar alertas (si no está definida)
-function showUserAlert(message, type = 'info') {
-    if (typeof window.showUserAlert === 'function') {
-        window.showUserAlert(message, type);
-    } else {
-        console.log(`[${type.toUpperCase()}] ${message}`);
-        // Crear alerta básica si no existe la función
-        const alert = document.createElement('div');
-        alert.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            padding: 15px;
-            background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#17a2b8'};
-            color: white;
-            border-radius: 5px;
-            z-index: 10000;
-            max-width: 400px;
-        `;
-        alert.textContent = message;
-        document.body.appendChild(alert);
-        
-        setTimeout(() => {
-            document.body.removeChild(alert);
-        }, 5000);
     }
 }
 
