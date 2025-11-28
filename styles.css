@@ -105,12 +105,12 @@ header {
 
 /* ===== ELEMENTOS ADMIN - VISIBLES SOLO PARA ADMINS ===== */
 .admin-menu-item {
-    display: none;
+    display: none !important;
     position: relative;
 }
 
 .admin-menu-item.visible {
-    display: block;
+    display: block !important;
 }
 
 .admin-badge {
@@ -124,11 +124,11 @@ header {
 }
 
 #admin-panel {
-    display: none;
+    display: none !important;
 }
 
 #admin-panel.active {
-    display: block;
+    display: block !important;
 }
 
 /* ===== WALLET CONNECTOR ===== */
@@ -136,6 +136,21 @@ header {
     display: flex;
     align-items: center;
     gap: 1rem;
+}
+
+.solana-network {
+    background: rgba(153, 69, 255, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.wallet-balance, .wallet-address {
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
 }
 
 .btn {
@@ -414,7 +429,7 @@ header {
 }
 
 /* ===== WALLET MODAL ===== */
-.wallet-modal {
+.wallet-modal, .claim-prize-modal, .shipping-status-modal {
     display: none;
     position: fixed;
     top: 0;
@@ -425,13 +440,13 @@ header {
     z-index: 2000;
 }
 
-.wallet-modal.active {
+.wallet-modal.active, .claim-prize-modal.active, .shipping-status-modal.active {
     display: flex;
     align-items: center;
     justify-content: center;
 }
 
-.wallet-modal-content {
+.wallet-modal-content, .claim-prize-content, .shipping-status-content {
     background: var(--dark);
     border-radius: 12px;
     padding: 2rem;
@@ -1080,6 +1095,87 @@ label {
     color: var(--success);
 }
 
+/* ===== WINNER STATS ===== */
+.winner-stats {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+    margin: 1.5rem 0;
+}
+
+.winner-stat-card {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 8px;
+    text-align: center;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.winner-stat-number {
+    font-size: 2rem;
+    font-weight: bold;
+    color: var(--secondary);
+    margin-bottom: 0.5rem;
+}
+
+.winner-stat-label {
+    color: var(--gray);
+    font-size: 0.9rem;
+}
+
+/* ===== TRANSACTIONS GRID ===== */
+.transactions-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    gap: 1rem;
+}
+
+.transaction-card {
+    background: rgba(255, 255, 255, 0.05);
+    padding: 1.5rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.transaction-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.transaction-amount {
+    font-weight: bold;
+    color: var(--secondary);
+}
+
+.transaction-date {
+    color: var(--gray);
+    font-size: 0.9rem;
+}
+
+.transaction-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.transaction-wallet {
+    font-family: monospace;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+}
+
+.transaction-status-badge {
+    padding: 0.3rem 0.7rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
 /* ===== FOOTER ===== */
 footer {
     background: rgba(0, 0, 0, 0.5);
@@ -1192,6 +1288,14 @@ footer {
     .winners-table td {
         padding: 0.5rem;
     }
+    
+    .winner-stats {
+        grid-template-columns: 1fr;
+    }
+    
+    .transactions-grid {
+        grid-template-columns: 1fr;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1218,5 +1322,9 @@ footer {
     
     .section-title {
         font-size: 2rem;
+    }
+    
+    .wallet-modal-content, .claim-prize-content, .shipping-status-content {
+        padding: 1.5rem;
     }
 }
