@@ -249,14 +249,18 @@ function disconnectWallet() {
     document.getElementById('network-indicator').style.background = 'rgba(153, 69, 255, 0.2)';
     document.getElementById('disconnect-wallet-btn').style.display = 'none';
     document.getElementById('winner-info-btn').style.display = 'none';
+    
+    // OCULTAR ELEMENTOS DE ADMIN AL DESCONECTAR
+    document.getElementById('admin-menu-item').style.display = 'none';
     document.getElementById('admin-menu-item').classList.remove('visible');
+    document.getElementById('admin-panel').style.display = 'none';
     document.getElementById('admin-panel').classList.remove('active');
 
     document.getElementById('connection-status').innerHTML = '<strong>Estado Wallet:</strong> Desconectado';
 
     showUserAlert('🔌 Wallet desconectada', 'info');
     
-    // ✅ IMPORTANTE: Re-renderizar los sorteos al desconectar
+    // Re-renderizar los sorteos al desconectar
     renderRaffles();
 }
 
@@ -276,6 +280,9 @@ function updateWalletUI(publicKey, balance) {
 
     document.getElementById('connection-status').innerHTML = '<strong>Estado Wallet:</strong> ✅ Conectada a VeriRifa-Sol';
 
+    // Verificar si es admin y mostrar/ocultar elementos
+    checkIfAdmin(publicKey);
+    
     // Actualizar botones de reclamar premio si es ganador
     updateClaimButtons();
 }
