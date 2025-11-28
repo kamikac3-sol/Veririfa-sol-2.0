@@ -1,5 +1,5 @@
-// Firebase Configuration - Versión Compat (CDN)
-const firebaseConfig = {
+// Configuración de Firebase - NUEVO PROYECTO: veririfa-sol-2
+const FIREBASE_CONFIG = {
     apiKey: "AIzaSyAXdc3j3btUiwItrFJZGvWrHJqhEae0_wU",
     authDomain: "veririfa-sol-2.firebaseapp.com",
     projectId: "veririfa-sol-2",
@@ -9,61 +9,332 @@ const firebaseConfig = {
     measurementId: "G-62F9LZN3DC"
 };
 
-// Initialize Firebase with compat version
-try {
-    // Initialize Firebase
-    const app = firebase.initializeApp(firebaseConfig);
-    const db = firebase.firestore();
-    const analytics = firebase.analytics();
+// Inicializar Firebase
+let firebaseApp;
+let db;
+let analytics;
 
-    console.log("✅ Firebase conectado correctamente a veririfa-sol-2");
+try {
+    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
+    analytics = firebase.analytics();
     
     // Configuración para desarrollo
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
         db.settings({
             experimentalForceLongPolling: true
         });
-        console.log("🔧 Modo desarrollo activado");
+        console.log("🔧 Modo desarrollo activado para Firebase");
     }
-
-    // Export for use in other files
-    window.db = db;
-    window.firebaseApp = app;
+    
+    console.log('✅ Firebase inicializado correctamente para veririfa-sol-2');
     
     // Verificar conexión
     db.collection("raffles").limit(1).get().then(() => {
         console.log("📡 Conexión a Firestore verificada");
-        showAlert("✅ Conectado a Firebase", "success");
     }).catch(error => {
         console.error("❌ Error conectando a Firestore:", error);
-        showAlert("❌ Error conectando a la base de datos", "error");
     });
-
+    
 } catch (error) {
-    console.error("❌ Error inicializando Firebase:", error);
+    console.error('❌ Error inicializando Firebase:', error);
+    showUserAlert('Error: No se puede conectar a la base de datos Firebase', 'error');
 }
 
-// Función de alerta para mostrar estado
-function showAlert(message, type = "info") {
-    const alert = document.getElementById('user-alert');
-    const alertMessage = document.getElementById('alert-message');
-    const alertIcon = document.getElementById('alert-icon');
-    
-    if (alert && alertMessage && alertIcon) {
-        alertMessage.textContent = message;
+// Funciones de Firebase
+async function saveRafflesToFirebase() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        showUserAlert('Error: No se puede conectar a la base de datos', 'error');
+        return false;
+    }
+
+    try {
+        for (const raffle of raffles) {
+            await db.collection('raffles').doc(raffle.id).set({
+                ...raffle,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+        console.log('✅ Sorteos guardados en Firebase:', raffles.length);
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando sorteos en Firebase:', error);
+        showUserAlert('Error guardando datos en la nube', 'error');
+        return false;
+    }
+}
+
+async function loadRafflesFromFirebase() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        raffles = [];
+        showUserAlert('Error: No se puede conectar a la base de datos', 'error');
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('raffles').get();
         
-        const icons = {
-            success: "✅",
-            error: "❌",
-            warning: "⚠️",
-            info: "ℹ️"
+        if (!snapshot.empty) {
+            raffles = [];
+            snapshot.forEach(doc => {
+                const raffleData = doc.data();
+                
+                // Asegurar que los campos necesarios existan
+                if (!raffleData.soldNumbers) raffleData.soldNumbers = [];
+                if (!raffleData.numberOwners) raffleData.numberOwners = {};
+                if (!raffleData.winner) raffleData.winner = null;
+                if (raffleData.prizeClaimed === undefined) raffleData.prizeClaimed = false;
+                if (raffleData.completed === undefined) raffleData.completed = false;
+                if (!raffleData.shippingStatus) raffleData.shippingStatus = 'pending';
+                if (!raffleData.createdAt) raffleData.createdAt = new Date().toISOString();
+                
+                // Mantener el ID del documento
+                raffleData.id = doc.id;
+                
+                raffles.push(raffleData);
+            });
+            console.log('✅ Sorteos cargados desde Firebase:', raffles.length);
+        } else {
+            console.log('📝 No hay sorteos en Firebase');
+            raffles = [];
+        }
+    } catch (error) {
+        console.error('❌ Error cargando sorteos desde Firebase:', error);
+        raffles = [];
+        showUserAlert('Error cargando datos desde la nube', 'error');
+    }
+}
+
+async function loadWinnersFromFirebase() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        winners = [];
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('winners').orderBy('winnerDate', 'desc').get();
+        
+        if (!snapshot.empty) {
+            winners = [];
+            snapshot.forEach(doc => {
+                const winnerData = doc.data();
+                winnerData.id = doc.id;
+                winners.push(winnerData);
+            });
+            console.log('✅ Ganadores cargados desde Firebase:', winners.length);
+        } else {
+            console.log('📝 No hay ganadores en Firebase');
+            winners = [];
+        }
+    } catch (error) {
+        console.error('❌ Error cargando ganadores desde Firebase:', error);
+        winners = [];
+    }
+}
+
+async function saveWinnerToFirebase(winnerData) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('winners').add({
+            ...winnerData,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('✅ Ganador guardado en Firebase');
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando ganador en Firebase:', error);
+        return false;
+    }
+}
+
+async function saveClaimToFirebase(claimData) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('claims').add({
+            ...claimData,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'pending',
+            processed: false
+        });
+        console.log('✅ Reclamación guardada en Firebase');
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando reclamación en Firebase:', error);
+        return false;
+    }
+}
+
+async function deleteRaffleFromFirebase(raffleId) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('raffles').doc(raffleId).delete();
+        console.log('✅ Sorteo eliminado de Firebase:', raffleId);
+        return true;
+    } catch (error) {
+        console.error('❌ Error eliminando sorteo de Firebase:', error);
+        return false;
+    }
+}
+
+// Función para obtener estadísticas (MEJORA AÑADIDA)
+async function getFirebaseStats() {
+    if (!db) return null;
+
+    try {
+        const stats = {
+            totalRaffles: 0,
+            activeRaffles: 0,
+            completedRaffles: 0,
+            totalWinners: 0,
+            totalClaims: 0
         };
+
+        // Contar sorteos
+        const rafflesSnapshot = await db.collection('raffles').get();
+        stats.totalRaffles = rafflesSnapshot.size;
         
-        alertIcon.textContent = icons[type] || "ℹ️";
-        alert.classList.add('show');
+        rafflesSnapshot.forEach(doc => {
+            const raffle = doc.data();
+            if (raffle.completed) {
+                stats.completedRaffles++;
+            } else {
+                stats.activeRaffles++;
+            }
+        });
+
+        // Contar ganadores
+        const winnersSnapshot = await db.collection('winners').get();
+        stats.totalWinners = winnersSnapshot.size;
+
+        // Contar reclamaciones
+        const claimsSnapshot = await db.collection('claims').get();
+        stats.totalClaims = claimsSnapshot.size;
+
+        console.log('📊 Estadísticas de Firebase:', stats);
+        return stats;
+    } catch (error) {
+        console.error('❌ Error obteniendo estadísticas de Firebase:', error);
+        return null;
+    }
+}
+
+// Función para limpiar datos de prueba (SOLO DESARROLLO)
+async function clearTestData() {
+    if (!db || !window.location.hostname.includes('localhost')) {
+        console.error('❌ Esta función solo está disponible en localhost');
+        return;
+    }
+
+    try {
+        // Eliminar todos los documentos de las colecciones
+        const collections = ['raffles', 'winners', 'claims'];
+        
+        for (const collectionName of collections) {
+            const snapshot = await db.collection(collectionName).get();
+            const batch = db.batch();
+            
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            
+            await batch.commit();
+            console.log(`✅ Datos de ${collectionName} eliminados`);
+        }
+        
+        showUserAlert('✅ Datos de prueba eliminados', 'success');
+    } catch (error) {
+        console.error('❌ Error eliminando datos de prueba:', error);
+        showUserAlert('Error eliminando datos de prueba', 'error');
+    }
+}
+
+// Función para exportar datos (MEJORA AÑADIDA)
+async function exportFirebaseData() {
+    if (!db) return null;
+
+    try {
+        const exportData = {
+            raffles: [],
+            winners: [],
+            claims: [],
+            exportDate: new Date().toISOString(),
+            project: 'veririfa-sol-2'
+        };
+
+        // Obtener sorteos
+        const rafflesSnapshot = await db.collection('raffles').get();
+        rafflesSnapshot.forEach(doc => {
+            exportData.raffles.push(doc.data());
+        });
+
+        // Obtener ganadores
+        const winnersSnapshot = await db.collection('winners').get();
+        winnersSnapshot.forEach(doc => {
+            exportData.winners.push(doc.data());
+        });
+
+        // Obtener reclamaciones
+        const claimsSnapshot = await db.collection('claims').get();
+        claimsSnapshot.forEach(doc => {
+            exportData.claims.push(doc.data());
+        });
+
+        console.log('📤 Datos exportados de Firebase:', exportData);
+        return exportData;
+    } catch (error) {
+        console.error('❌ Error exportando datos de Firebase:', error);
+        return null;
+    }
+}
+
+// Función auxiliar para mostrar alertas (si no está definida)
+function showUserAlert(message, type = 'info') {
+    if (typeof window.showUserAlert === 'function') {
+        window.showUserAlert(message, type);
+    } else {
+        console.log(`[${type.toUpperCase()}] ${message}`);
+        // Crear alerta básica si no existe la función
+        const alert = document.createElement('div');
+        alert.style.cssText = `
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 15px;
+            background: ${type === 'error' ? '#dc3545' : type === 'success' ? '#28a745' : '#17a2b8'};
+            color: white;
+            border-radius: 5px;
+            z-index: 10000;
+            max-width: 400px;
+        `;
+        alert.textContent = message;
+        document.body.appendChild(alert);
         
         setTimeout(() => {
-            alert.classList.remove('show');
+            document.body.removeChild(alert);
         }, 5000);
     }
 }
+
+// Exportar funciones para uso global
+window.db = db;
+window.firebaseApp = firebaseApp;
+window.getFirebaseStats = getFirebaseStats;
+window.exportFirebaseData = exportFirebaseData;
+window.clearTestData = clearTestData;
+
+console.log('🔥 Firebase.js cargado completamente para veririfa-sol-2');
