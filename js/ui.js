@@ -22,7 +22,7 @@ function showUserAlert(message, type = 'info', duration = 5000) {
     }
 
     alertMessage.textContent = message;
-    alert.style.display = 'block';
+    alert.classList.add('show');
 
     if (duration > 0) {
         setTimeout(() => {
@@ -32,7 +32,7 @@ function showUserAlert(message, type = 'info', duration = 5000) {
 }
 
 function hideUserAlert() {
-    document.getElementById('user-alert').style.display = 'none';
+    document.getElementById('user-alert').classList.remove('show');
 }
 
 function showPaymentStatus(message, type = 'info') {
