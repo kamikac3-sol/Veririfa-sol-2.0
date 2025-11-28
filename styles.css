@@ -65,6 +65,11 @@ header {
     text-decoration: none;
 }
 
+.logo-icon {
+    width: 40px;
+    height: 40px;
+}
+
 .logo-main {
     font-size: 1.5rem;
     font-weight: bold;
@@ -98,17 +103,32 @@ header {
     color: var(--secondary);
 }
 
-/* ===== ELEMENTOS ADMIN - OCULTOS POR DEFECTO ===== */
+/* ===== ELEMENTOS ADMIN - VISIBLES SOLO PARA ADMINS ===== */
 .admin-menu-item {
-    display: none !important;
+    display: none;
+    position: relative;
+}
+
+.admin-menu-item.visible {
+    display: block;
+}
+
+.admin-badge {
+    background: var(--secondary);
+    color: var(--dark);
+    padding: 0.2rem 0.5rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: bold;
+    margin-left: 0.5rem;
 }
 
 #admin-panel {
-    display: none !important;
+    display: none;
 }
 
-#admin-panel-link {
-    display: none !important;
+#admin-panel.active {
+    display: block;
 }
 
 /* ===== WALLET CONNECTOR ===== */
@@ -204,6 +224,15 @@ header {
     text-align: center;
     padding: 4rem 0;
     background: linear-gradient(135deg, rgba(153, 69, 255, 0.1), rgba(20, 241, 149, 0.1));
+}
+
+.hero-logo {
+    margin-bottom: 2rem;
+}
+
+.hero-logo svg {
+    width: 120px;
+    height: 120px;
 }
 
 .hero h1 {
@@ -337,6 +366,12 @@ header {
     align-items: center;
     justify-content: center;
     font-size: 4rem;
+}
+
+.raffle-image img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
 }
 
 .raffle-content {
@@ -650,6 +685,10 @@ header {
     border-left: 4px solid var(--info);
 }
 
+.user-alert.show {
+    display: block;
+}
+
 .alert-content {
     display: flex;
     align-items: center;
@@ -850,15 +889,10 @@ label {
     margin-bottom: 1rem;
 }
 
-/* ===== ADMIN PANEL - SOLO VISIBLE PARA ADMINS ===== */
+/* ===== ADMIN PANEL ===== */
 .admin-panel {
     padding: 4rem 0;
     background: rgba(153, 69, 255, 0.05);
-    display: none;
-}
-
-.admin-panel.active {
-    display: block;
 }
 
 .admin-header {
@@ -896,6 +930,109 @@ label {
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 1rem;
+}
+
+.image-preview {
+    margin-top: 1rem;
+    text-align: center;
+}
+
+.emoji-preview {
+    font-size: 3rem;
+}
+
+.image-preview img {
+    max-width: 100%;
+    max-height: 200px;
+    border-radius: 8px;
+}
+
+/* ===== TABLA DE GANADORES PARA ADMIN ===== */
+.winners-admin-section {
+    margin: 2rem 0;
+}
+
+.winners-admin-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.winners-filters {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.winners-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.winners-table th,
+.winners-table td {
+    padding: 1rem;
+    text-align: left;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.winners-table th {
+    background: rgba(153, 69, 255, 0.2);
+    color: var(--secondary);
+    font-weight: 600;
+}
+
+.winner-contact-info {
+    font-size: 0.9rem;
+}
+
+.winner-contact-info div {
+    margin-bottom: 0.25rem;
+}
+
+.winner-status-badge {
+    padding: 0.3rem 0.7rem;
+    border-radius: 15px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.status-pending {
+    background: rgba(255, 193, 7, 0.2);
+    color: var(--warning);
+}
+
+.status-claimed {
+    background: rgba(23, 162, 184, 0.2);
+    color: var(--info);
+}
+
+.status-shipped {
+    background: rgba(153, 69, 255, 0.2);
+    color: var(--primary);
+}
+
+.status-delivered {
+    background: rgba(40, 167, 69, 0.2);
+    color: var(--success);
+}
+
+.winner-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.no-winners-message {
+    text-align: center;
+    padding: 3rem;
+    color: var(--gray);
 }
 
 /* ===== SHIPPING STATUS ===== */
@@ -949,6 +1086,15 @@ footer {
     padding: 3rem 0 2rem;
     text-align: center;
     border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.footer-logo {
+    margin-bottom: 1.5rem;
+}
+
+.footer-logo svg {
+    width: 60px;
+    height: 60px;
 }
 
 .copyright {
@@ -1028,6 +1174,24 @@ footer {
         font-size: 0.8rem;
         padding: 0.4rem 0.8rem;
     }
+    
+    .winners-admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    
+    .winners-filters {
+        width: 100%;
+    }
+    
+    .winners-table {
+        font-size: 0.8rem;
+    }
+    
+    .winners-table th,
+    .winners-table td {
+        padding: 0.5rem;
+    }
 }
 
 @media (max-width: 480px) {
@@ -1050,5 +1214,9 @@ footer {
     
     .numbers-grid {
         grid-template-columns: repeat(auto-fill, minmax(40px, 1fr));
+    }
+    
+    .section-title {
+        font-size: 2rem;
     }
 }
