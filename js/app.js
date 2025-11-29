@@ -6,6 +6,9 @@ let userContactInfo = {
     phone: ''
 };
 
+// ✅ MEJORADO: Sistema de gestión de estado de paginación
+const paginationState = new Map();
+
 // Función principal de inicialización
 async function initApp() {
     // Cargar datos primero
@@ -215,13 +218,18 @@ function setupEventListeners() {
     setupWinnersAdminFilters();
 }
 
+// ✅ MEJORADO: Validación robusta de admin
 function checkIfAdmin(publicKey) {
-    isAdmin = (publicKey === ADMIN_WALLET_ADDRESS);
+    const adminWallets = [
+        '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+    ];
+    
+    isAdmin = adminWallets.includes(publicKey.toString());
 
     if (isAdmin) {
         document.getElementById('admin-menu-item').classList.add('visible');
+        console.log('✅ Modo verificador activado para:', publicKey.toString());
         showUserAlert('✅ Modo verificador activado', 'success');
-        // Cargar tabla de ganadores cuando se conecta como admin
         loadWinnersAdminTable();
     } else {
         document.getElementById('admin-menu-item').classList.remove('visible');
@@ -237,3 +245,16 @@ document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM cargado, inicializando VeriRifa-Sol...');
     initApp();
 });
+
+// ✅ NUEVO: Obtener estado de paginación para un sorteo específico
+function getPaginationState(raffleId) {
+    if (!paginationState.has(raffleId)) {
+        paginationState.set(raffleId, { currentPage: 1 });
+    }
+    return paginationState.get(raffleId);
+}
+
+// ✅ NUEVO: Actualizar estado de paginación
+function updatePaginationState(raffleId, newState) {
+    paginationState.set(raffleId, { ...getPaginationState(raffleId), ...newState });
+}
