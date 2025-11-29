@@ -65,6 +65,58 @@ async function saveRafflesToFirebase() {
     }
 }
 
+// ✅ NUEVA: Función de transacción atómica para reservar números
+async function reserveNumbersWithTransaction(raffleId, numbers, userWallet) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        const raffleRef = db.collection('raffles').doc(raffleId);
+        
+        return await db.runTransaction(async (transaction) => {
+            const raffleDoc = await transaction.get(raffleRef);
+            
+            if (!raffleDoc.exists) {
+                throw new Error('Sorteo no encontrado');
+            }
+            
+            const raffleData = raffleDoc.data();
+            const soldNumbers = raffleData.soldNumbers || [];
+            const numberOwners = raffleData.numberOwners || {};
+            
+            // Verificar disponibilidad de TODOS los números
+            const unavailableNumbers = numbers.filter(num => 
+                soldNumbers.includes(num) || numberOwners[num]
+            );
+            
+            if (unavailableNumbers.length > 0) {
+                throw new Error(`Números ${unavailableNumbers.join(', ')} ya no disponibles`);
+            }
+            
+            // Reservar números atómicamente
+            numbers.forEach(num => {
+                soldNumbers.push(num);
+                numberOwners[num] = userWallet;
+            });
+            
+            // Actualizar en transacción
+            transaction.update(raffleRef, {
+                soldNumbers: soldNumbers,
+                numberOwners: numberOwners,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            return true;
+        });
+        
+    } catch (error) {
+        console.error('Error en transacción de reserva:', error);
+        throw error;
+    }
+}
+
 async function loadRafflesFromFirebase() {
     if (!db) {
         console.error('❌ Firebase no disponible');
@@ -308,5 +360,6 @@ window.firebaseApp = firebaseApp;
 window.getFirebaseStats = getFirebaseStats;
 window.exportFirebaseData = exportFirebaseData;
 window.clearTestData = clearTestData;
+window.reserveNumbersWithTransaction = reserveNumbersWithTransaction;
 
 console.log('🔥 Firebase.js cargado completamente para veririfa-sol-2');
