@@ -1,5 +1,18 @@
 // Funciones de interfaz de usuario
 
+// ✅ NUEVO: Función de sanitización
+function sanitizeHTML(str) {
+    if (!str) return '';
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+}
+
+// ✅ NUEVO: Función segura para renderizar contenido
+function safeSetInnerHTML(element, html) {
+    element.innerHTML = sanitizeHTML(html);
+}
+
 function showUserAlert(message, type = 'info', duration = 5000) {
     const alert = document.getElementById('user-alert');
     const alertIcon = document.getElementById('alert-icon');
@@ -21,6 +34,7 @@ function showUserAlert(message, type = 'info', duration = 5000) {
             alertIcon.textContent = 'ℹ️';
     }
 
+    // ✅ MEJORADO: Usar textContent en lugar de innerHTML para seguridad
     alertMessage.textContent = message;
     alert.classList.add('show');
 
@@ -40,7 +54,11 @@ function showPaymentStatus(message, type = 'info') {
     const paymentDetails = document.getElementById('payment-details');
     
     paymentStatus.style.display = 'block';
-    paymentDetails.innerHTML = message.replace(/\n/g, '<br>');
+    
+    // ✅ MEJORADO: Sanitizar el mensaje
+    const sanitizedMessage = sanitizeHTML(message.replace(/\n/g, '<br>'));
+    paymentDetails.innerHTML = sanitizedMessage;
+    
     paymentStatus.className = `transaction-status ${type === 'success' ? 'transaction-success' : ''} ${type === 'error' ? 'transaction-error' : ''}`;
 }
 
@@ -49,7 +67,11 @@ function showTransactionStatus(message, type = 'info') {
     const detailsElement = document.getElementById('transaction-details');
     
     statusElement.style.display = 'block';
-    detailsElement.innerHTML = message.replace(/\n/g, '<br>');
+    
+    // ✅ MEJORADO: Sanitizar el mensaje
+    const sanitizedMessage = sanitizeHTML(message.replace(/\n/g, '<br>'));
+    detailsElement.innerHTML = sanitizedMessage;
+    
     statusElement.className = `transaction-status ${type === 'success' ? 'transaction-success' : ''} ${type === 'error' ? 'transaction-error' : ''}`;
 }
 
@@ -58,7 +80,11 @@ function showClaimStatus(message, type = 'info') {
     const claimDetails = document.getElementById('claim-details');
 
     claimStatus.style.display = 'block';
-    claimDetails.innerHTML = message.replace(/\n/g, '<br>');
+    
+    // ✅ MEJORADO: Sanitizar el mensaje
+    const sanitizedMessage = sanitizeHTML(message.replace(/\n/g, '<br>'));
+    claimDetails.innerHTML = sanitizedMessage;
+    
     claimStatus.className = `transaction-status ${type === 'success' ? 'transaction-success' : ''} ${type === 'error' ? 'transaction-error' : ''}`;
 }
 
@@ -150,3 +176,29 @@ function validateClaimForm() {
     
     return isValid;
 }
+
+// ✅ NUEVO: Función para verificar permisos de admin
+function verifyAdminAccess() {
+    if (!currentWallet.publicKey) {
+        showUserAlert('❌ Conecta tu wallet primero', 'error');
+        return false;
+    }
+    
+    const adminWallets = [
+        '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+    ];
+    
+    const isCurrentlyAdmin = adminWallets.includes(currentWallet.publicKey.toString());
+    
+    if (!isCurrentlyAdmin) {
+        showUserAlert('❌ Solo el verificador puede realizar esta acción', 'error');
+        return false;
+    }
+    
+    return true;
+}
+
+// Exportar funciones para uso global
+window.sanitizeHTML = sanitizeHTML;
+window.safeSetInnerHTML = safeSetInnerHTML;
+window.verifyAdminAccess = verifyAdminAccess;
