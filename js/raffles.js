@@ -5,7 +5,7 @@ let selectedNumbers = [];
 let currentPage = 1;
 const numbersPerPage = 100;
 
-// ✅ NUEVO: Sistema de gestión de event listeners
+// ✅ MEJORADO: Sistema de gestión de event listeners
 const eventListeners = new Map();
 
 function renderRaffles() {
@@ -658,8 +658,23 @@ async function processRealPayment() {
     document.getElementById('confirm-payment-btn').disabled = true;
 
     try {
-        // ✅ NUEVO: Reservar números con transacción atómica primero
-        showPaymentStatus('🔒 Reservando números...', 'info');
+        // ✅ IMPORTANTE: VERIFICAR DISPONIBILIDAD ACTUALIZADA ANTES DE RESERVAR
+        // Forzar actualización del sorteo actual primero
+        const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+        if (updatedRaffle) {
+            currentRaffle = updatedRaffle;
+        }
+        
+        const unavailableNumbers = selectedNumbers.filter(num => 
+            currentRaffle.soldNumbers.includes(num) || currentRaffle.numberOwners[num]
+        );
+        
+        if (unavailableNumbers.length > 0) {
+            throw new Error(`Los números ${unavailableNumbers.join(', ')} ya no están disponibles. Por favor, selecciona otros números.`);
+        }
+
+        // ✅ INTENTAR RESERVAR NÚMEROS CON TRANSACCIÓN ATÓMICA
+        showPaymentStatus('🔒 Reservando números con transacción atómica...', 'info');
         
         const reservationSuccess = await reserveNumbersWithTransaction(
             currentRaffle.id, 
@@ -671,7 +686,7 @@ async function processRealPayment() {
             throw new Error('No se pudieron reservar los números seleccionados. Puede que ya hayan sido vendidos.');
         }
 
-        // Crear transacción
+        // ✅ CREAR TRANSACCIÓN EN BLOCKCHAIN
         const transaction = new solanaWeb3.Transaction();
         
         // Calcular lamports (1 SOL = 1,000,000,000 lamports)
@@ -701,22 +716,18 @@ async function processRealPayment() {
         // Enviar transacción
         const signature = await connection.sendRawTransaction(signedTransaction.serialize());
         
-        showPaymentStatus('⏳ Confirmando transacción...', 'info');
+        showPaymentStatus('⏳ Confirmando transacción en la blockchain...', 'info');
         
         // Confirmar transacción
         const confirmation = await connection.confirmTransaction(signature, 'confirmed');
         
         if (confirmation.value.err) {
-            throw new Error('Transacción fallida: ' + confirmation.value.err);
+            throw new Error('Transacción fallida en la blockchain: ' + confirmation.value.err);
         }
         
-        // ✅ TRANSACCIÓN EXITOSA - Actualizar estado local para consistencia
-        selectedNumbers.forEach(number => {
-            if (!currentRaffle.soldNumbers.includes(number)) {
-                currentRaffle.soldNumbers.push(number);
-                currentRaffle.numberOwners[number] = currentWallet.publicKey.toString();
-            }
-        });
+        // ✅ ACTUALIZAR DATOS LOCALES PARA CONSISTENCIA
+        // Forzar actualización del sorteo después de la transacción exitosa
+        await forceResync();
         
         // Actualizar balance del usuario
         await updateUserBalance();
@@ -727,20 +738,44 @@ async function processRealPayment() {
             `• Números comprados: ${selectedNumbers.join(', ')}\n` +
             `• Total pagado: ${totalAmount.toFixed(4)} SOL\n` +
             `• Wallet destino: ${ADMIN_WALLET_ADDRESS.substring(0, 8)}...\n` +
-            `• Estado: Confirmado en blockchain`,
+            `• Estado: Confirmado en blockchain y Firebase`,
             'success'
         );
         
         // Cerrar modal después de éxito
         setTimeout(() => {
             closeNumberSelectionModal();
-            renderRaffles();
+            // Los listeners en tiempo real actualizarán automáticamente
             showUserAlert(`🎉 ¡Compra verificada! Números: ${selectedNumbers.join(', ')}`, 'success');
         }, 3000);
         
     } catch (error) {
         console.error('Error procesando pago:', error);
         showPaymentStatus(`❌ Error en transacción: ${error.message}`, 'error');
+        
+        // ✅ IMPORTANTE: FORZAR ACTUALIZACIÓN DEL SORTEO ACTUAL
+        // Recargar datos desde Firebase
+        await forceResync();
+        
+        if (currentRaffle) {
+            // Buscar el sorteo más reciente en el array global
+            const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+            if (updatedRaffle) {
+                currentRaffle = updatedRaffle;
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
+        }
+        
+        // Mostrar alerta detallada al usuario
+        showUserAlert(
+            `⚠️ No se pudo completar la compra:\n\n` +
+            `${error.message}\n\n` +
+            `Los datos se han actualizado. Por favor, verifica la disponibilidad de los números antes de intentar nuevamente.`,
+            'warning',
+            10000
+        );
+        
         document.getElementById('confirm-payment-btn').disabled = false;
     }
 }
