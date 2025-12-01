@@ -9,14 +9,28 @@ let userContactInfo = {
 // ✅ MEJORADO: Sistema de gestión de estado de paginación
 const paginationState = new Map();
 
+// ✅ NUEVO: Estado de sincronización
+let realtimeEnabled = false;
+
 // Función principal de inicialización
 async function initApp() {
-    // Cargar datos primero
+    console.log('🚀 Inicializando VeriRifa-Sol v2.0...');
+    
+    // Cargar datos iniciales primero
     await loadRafflesFromFirebase();
     await loadWinnersFromFirebase();
 
+    // Inicializar sincronización en tiempo real
+    realtimeEnabled = await initRealtimeSync();
+    setupRealtimeConnectionHandlers();
+    
+    if (realtimeEnabled) {
+        console.log('🔄 Sincronización en tiempo real activada');
+    }
+
     // Si no hay sorteos, crear algunos de ejemplo
     if (raffles.length === 0) {
+        console.log('📝 Creando sorteos de ejemplo...');
         raffles = [
             {
                 id: 'ps5-verificado',
@@ -35,7 +49,8 @@ async function initApp() {
                 prizeClaimed: false,
                 isSelectingWinner: false,
                 completed: false,
-                shippingStatus: 'pending'
+                shippingStatus: 'pending',
+                createdAt: new Date().toISOString()
             },
             {
                 id: 'macbook-verificado',
@@ -54,7 +69,8 @@ async function initApp() {
                 prizeClaimed: false,
                 isSelectingWinner: false,
                 completed: false,
-                shippingStatus: 'pending'
+                shippingStatus: 'pending',
+                createdAt: new Date().toISOString()
             }
         ];
         // Guardar en Firebase
@@ -73,7 +89,13 @@ async function initApp() {
     // Conectar a blockchain después
     await connectToBlockchain();
 
-    showUserAlert('✅ VeriRifa-Sol cargada. Conectada a Solana Testnet Real + Firebase.', 'success');
+    showUserAlert(
+        '✅ VeriRifa-Sol completamente cargada\n\n' +
+        '• Sincronización en tiempo real: ' + (realtimeEnabled ? 'ACTIVADA 🔄' : 'DESACTIVADA') + '\n' +
+        '• Blockchain Solana Testnet: CONECTADA ⚡\n' +
+        '• Firebase: SINCRONIZADO 🔥',
+        'success'
+    );
 }
 
 function setupEventListeners() {
@@ -216,6 +238,25 @@ function setupEventListeners() {
 
     // Configurar filtros para la tabla de ganadores
     setupWinnersAdminFilters();
+    
+    // ✅ NUEVO: Botón para forzar resincronización
+    const resyncBtn = document.getElementById('force-resync-btn');
+    if (!resyncBtn) {
+        // Crear botón si no existe
+        const walletConnector = document.querySelector('.wallet-connector');
+        if (walletConnector) {
+            const resyncButton = document.createElement('button');
+            resyncButton.id = 'force-resync-btn';
+            resyncButton.className = 'btn btn-info btn-small';
+            resyncButton.innerHTML = '<span>🔄 Sincronizar</span>';
+            resyncButton.style.display = 'none';
+            walletConnector.appendChild(resyncButton);
+            
+            resyncButton.addEventListener('click', function() {
+                forceResync();
+            });
+        }
+    }
 }
 
 // ✅ MEJORADO: Validación robusta de admin
@@ -257,4 +298,83 @@ function getPaginationState(raffleId) {
 // ✅ NUEVO: Actualizar estado de paginación
 function updatePaginationState(raffleId, newState) {
     paginationState.set(raffleId, { ...getPaginationState(raffleId), ...newState });
+}
+
+// ✅ NUEVO: Función para forzar actualización de datos
+function forceDataRefresh() {
+    if (currentRaffle) {
+        const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+        if (updatedRaffle) {
+            currentRaffle = updatedRaffle;
+            
+            if (document.getElementById('number-selection-modal').classList.contains('active')) {
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
+        }
+    }
+    renderRaffles();
+    updateClaimButtons();
+}
+
+// ✅ NUEVO: Mostrar/ocultar botón de resincronización
+function updateResyncButton() {
+    const resyncBtn = document.getElementById('force-resync-btn');
+    if (resyncBtn) {
+        if (currentWallet.publicKey) {
+            resyncBtn.style.display = 'inline-flex';
+        } else {
+            resyncBtn.style.display = 'none';
+        }
+    }
+}
+
+// ✅ NUEVO: Función auxiliar para crear sorteos de ejemplo
+async function createSampleRaffles() {
+    const sampleRaffles = [
+        {
+            id: 'ps5-' + Date.now(),
+            name: 'PlayStation 5 - Sorteo Verificado',
+            description: 'PS5 real en VeriRifa-Sol - Transacciones verificadas',
+            price: 0.1,
+            image: '🎮',
+            totalNumbers: 50,
+            soldNumbers: [],
+            numberOwners: {},
+            prize: 'PlayStation 5 Real',
+            contractAddress: 'Testnet Contract',
+            status: 'active',
+            adminWallet: ADMIN_WALLET_ADDRESS,
+            winner: null,
+            prizeClaimed: false,
+            isSelectingWinner: false,
+            completed: false,
+            shippingStatus: 'pending',
+            createdAt: new Date().toISOString()
+        },
+        {
+            id: 'macbook-' + Date.now(),
+            name: 'MacBook Pro - Verificado',
+            description: 'MacBook Pro real - Blockchain verificada de Solana',
+            price: 0.2,
+            image: '💻',
+            totalNumbers: 30,
+            soldNumbers: [],
+            numberOwners: {},
+            prize: 'MacBook Pro 14"',
+            contractAddress: 'Testnet Contract',
+            status: 'active',
+            adminWallet: ADMIN_WALLET_ADDRESS,
+            winner: null,
+            prizeClaimed: false,
+            isSelectingWinner: false,
+            completed: false,
+            shippingStatus: 'pending',
+            createdAt: new Date().toISOString()
+        }
+    ];
+    
+    raffles.push(...sampleRaffles);
+    await saveRafflesToFirebase();
+    renderRaffles();
 }
