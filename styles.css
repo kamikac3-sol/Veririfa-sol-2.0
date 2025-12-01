@@ -1328,3 +1328,35 @@ footer {
         padding: 1.5rem;
     }
 }
+/* ✅ NUEVO: Estilos para indicador de sincronización */
+.realtime-status {
+    background: rgba(20, 241, 149, 0.2);
+    padding: 0.5rem 1rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    animation: pulse 2s infinite;
+    display: none;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.7; }
+    100% { opacity: 1; }
+}
+
+/* Mostrar el indicador cuando la sincronización esté activa */
+.realtime-status.active {
+    display: block;
+}
+
+/* ✅ NUEVO: Mejoras para botones deshabilitados */
+.btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.btn:disabled:hover {
+    transform: none !important;
+}
