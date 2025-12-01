@@ -354,6 +354,192 @@ async function exportFirebaseData() {
     }
 }
 
+// ✅ NUEVO: Configurar listeners en tiempo real para sorteos
+function setupRafflesRealTimeListener() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return;
+    }
+
+    // Escuchar cambios en tiempo real en todos los sorteos
+    db.collection('raffles').onSnapshot((snapshot) => {
+        console.log('🔄 Actualización en tiempo real de sorteos recibida');
+        
+        const updatedRaffles = [];
+        snapshot.forEach(doc => {
+            const raffleData = doc.data();
+            
+            // Asegurar que los campos necesarios existan
+            if (!raffleData.soldNumbers) raffleData.soldNumbers = [];
+            if (!raffleData.numberOwners) raffleData.numberOwners = {};
+            if (!raffleData.winner) raffleData.winner = null;
+            if (raffleData.prizeClaimed === undefined) raffleData.prizeClaimed = false;
+            if (raffleData.completed === undefined) raffleData.completed = false;
+            if (!raffleData.shippingStatus) raffleData.shippingStatus = 'pending';
+            if (!raffleData.createdAt) raffleData.createdAt = new Date().toISOString();
+            
+            // Mantener el ID del documento
+            raffleData.id = doc.id;
+            
+            updatedRaffles.push(raffleData);
+        });
+        
+        // Actualizar el array global de sorteos
+        raffles = updatedRaffles;
+        
+        // Re-renderizar la interfaz de usuario
+        renderRaffles();
+        updateClaimButtons();
+        
+        // Si estamos en el modal de selección de números, actualizar la cuadrícula
+        if (currentRaffle) {
+            // Encontrar el sorteo actualizado
+            const updatedCurrentRaffle = raffles.find(r => r.id === currentRaffle.id);
+            if (updatedCurrentRaffle) {
+                currentRaffle = updatedCurrentRaffle;
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
+        }
+        
+        console.log('✅ Sorteos actualizados en tiempo real:', raffles.length);
+        
+        // Si estamos en el panel admin, actualizar también
+        if (isAdmin && document.getElementById('admin-panel').classList.contains('active')) {
+            renderCompletedRaffles();
+            loadWinnersAdminTable();
+        }
+        
+    }, (error) => {
+        console.error('❌ Error en listener de sorteos:', error);
+    });
+}
+
+// ✅ NUEVO: Configurar listeners en tiempo real para ganadores
+function setupWinnersRealTimeListener() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return;
+    }
+
+    db.collection('winners').orderBy('winnerDate', 'desc').onSnapshot((snapshot) => {
+        console.log('🔄 Actualización en tiempo real de ganadores recibida');
+        
+        const updatedWinners = [];
+        snapshot.forEach(doc => {
+            const winnerData = doc.data();
+            winnerData.id = doc.id;
+            updatedWinners.push(winnerData);
+        });
+        
+        winners = updatedWinners;
+        renderWinnersArchive();
+        
+        console.log('✅ Ganadores actualizados en tiempo real:', winners.length);
+    }, (error) => {
+        console.error('❌ Error en listener de ganadores:', error);
+    });
+}
+
+// ✅ NUEVO: Escuchar reclamaciones en tiempo real
+function setupClaimsRealTimeListener() {
+    if (!db) return;
+    
+    db.collection('claims').orderBy('claimDate', 'desc').onSnapshot((snapshot) => {
+        console.log('🔄 Actualización en tiempo real de reclamaciones recibida');
+        
+        // Actualizar la tabla de admin si está visible
+        if (isAdmin && document.getElementById('admin-panel').classList.contains('active')) {
+            loadWinnersAdminTable();
+        }
+    });
+}
+
+// ✅ NUEVO: Gestión de sincronización en tiempo real
+let realtimeSync = {
+    raffles: false,
+    winners: false,
+    claims: false
+};
+
+// ✅ NUEVO: Inicializar todos los listeners en tiempo real
+async function initRealtimeSync() {
+    console.log('🔄 Iniciando sincronización en tiempo real...');
+    
+    try {
+        // Configurar listeners
+        setupRafflesRealTimeListener();
+        setupWinnersRealTimeListener();
+        setupClaimsRealTimeListener();
+        
+        realtimeSync = {
+            raffles: true,
+            winners: true,
+            claims: true
+        };
+        
+        console.log('✅ Sincronización en tiempo real activada');
+        return true;
+    } catch (error) {
+        console.error('❌ Error iniciando sincronización en tiempo real:', error);
+        return false;
+    }
+}
+
+// ✅ NUEVO: Verificar estado de sincronización
+function checkRealtimeStatus() {
+    const status = {
+        raffles: realtimeSync.raffles ? '🟢 Conectado' : '🔴 Desconectado',
+        winners: realtimeSync.winners ? '🟢 Conectado' : '🔴 Desconectado',
+        claims: realtimeSync.claims ? '🟢 Conectado' : '🔴 Desconectado'
+    };
+    
+    return status;
+}
+
+// ✅ NUEVO: Forzar resincronización
+async function forceResync() {
+    console.log('🔄 Forzando resincronización...');
+    
+    // Recargar datos desde Firebase
+    await loadRafflesFromFirebase();
+    await loadWinnersFromFirebase();
+    
+    // Re-renderizar todo
+    renderRaffles();
+    renderWinnersArchive();
+    updateClaimButtons();
+    
+    if (currentRaffle) {
+        const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+        if (updatedRaffle) {
+            currentRaffle = updatedRaffle;
+            
+            if (document.getElementById('number-selection-modal').classList.contains('active')) {
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
+        }
+    }
+    
+    console.log('✅ Resincronización completada');
+    showUserAlert('✅ Datos resincronizados correctamente', 'success');
+}
+
+// ✅ NUEVO: Manejo de desconexión/reconexión
+function setupRealtimeConnectionHandlers() {
+    // Detectar cambios en conexión a internet
+    window.addEventListener('online', () => {
+        console.log('🌐 Conexión a internet restablecida');
+        forceResync();
+    });
+    
+    window.addEventListener('offline', () => {
+        console.log('🌐 Sin conexión a internet');
+        showUserAlert('⚠️ Sin conexión a internet. Los datos pueden no estar actualizados.', 'warning', 0);
+    });
+}
+
 // Exportar funciones para uso global
 window.db = db;
 window.firebaseApp = firebaseApp;
@@ -361,5 +547,9 @@ window.getFirebaseStats = getFirebaseStats;
 window.exportFirebaseData = exportFirebaseData;
 window.clearTestData = clearTestData;
 window.reserveNumbersWithTransaction = reserveNumbersWithTransaction;
+window.initRealtimeSync = initRealtimeSync;
+window.checkRealtimeStatus = checkRealtimeStatus;
+window.forceResync = forceResync;
+window.setupRealtimeConnectionHandlers = setupRealtimeConnectionHandlers;
 
-console.log('🔥 Firebase.js cargado completamente para veririfa-sol-2');
+console.log('🔥 Firebase.js cargado completamente para veririfa-sol-2 con sincronización en tiempo real');
