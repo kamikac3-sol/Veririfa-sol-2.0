@@ -223,6 +223,9 @@
                 </ul>
                 <div class="wallet-connector">
                     <div class="solana-network" id="network-indicator">🔴 Desconectado</div>
+                    <div class="realtime-status" id="realtime-status" style="display: none;">
+                        <span>🔄 Sincronización activa</span>
+                    </div>
                     <div class="wallet-balance" id="wallet-balance" style="display: none;"></div>
                     <div class="wallet-address" id="connected-wallet-address" style="display: none;"></div>
                     <button class="btn" id="connect-wallet-btn">
@@ -233,6 +236,10 @@
                     </button>
                     <button class="btn btn-info btn-small" id="winner-info-btn" style="display: none;">
                         <span>📝 Info Ganador</span>
+                    </button>
+                    <!-- ✅ NUEVO: Botón de resincronización -->
+                    <button class="btn btn-info btn-small" id="force-resync-btn" style="display: none;">
+                        <span>🔄 Sincronizar</span>
                     </button>
                 </div>
             </nav>
