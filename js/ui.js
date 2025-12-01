@@ -198,7 +198,33 @@ function verifyAdminAccess() {
     return true;
 }
 
+// ✅ NUEVO: Función para refrescar datos del sorteo actual
+function refreshCurrentRaffle() {
+    if (!currentRaffle) return;
+    
+    const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+    if (updatedRaffle) {
+        currentRaffle = updatedRaffle;
+        
+        if (document.getElementById('number-selection-modal').classList.contains('active')) {
+            renderNumbersGrid();
+            updateSelectionUI();
+        }
+    }
+}
+
+// ✅ NUEVO: Función para forzar actualización de datos
+function forceDataRefresh() {
+    if (currentRaffle) {
+        refreshCurrentRaffle();
+    }
+    renderRaffles();
+    updateClaimButtons();
+}
+
 // Exportar funciones para uso global
 window.sanitizeHTML = sanitizeHTML;
 window.safeSetInnerHTML = safeSetInnerHTML;
 window.verifyAdminAccess = verifyAdminAccess;
+window.refreshCurrentRaffle = refreshCurrentRaffle;
+window.forceDataRefresh = forceDataRefresh;
