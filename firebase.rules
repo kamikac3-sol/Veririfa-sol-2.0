@@ -1,0 +1,52 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Colección de sorteos
+    match /raffles/{raffleId} {
+      allow read: if true;  // Cualquiera puede leer
+      allow write: if 
+        // Solo wallets admin pueden escribir
+        request.auth != null && 
+        request.auth.token.adminWallets.hasAny([
+          '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+        ]);
+    }
+    
+    // Colección de ganadores
+    match /winners/{winnerId} {
+      allow read: if true;  // Cualquiera puede leer
+      allow write: if 
+        request.auth != null && 
+        (
+          // Solo el ganador puede crear su claim
+          request.resource.data.winnerWallet == request.auth.uid ||
+          // O el admin
+          request.auth.token.adminWallets.hasAny([
+            '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+          ])
+        );
+    }
+    
+    // Colección de claims
+    match /claims/{claimId} {
+      allow read: if 
+        request.auth != null && 
+        request.auth.token.adminWallets.hasAny([
+          '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+        ]);
+      allow write: if 
+        request.auth != null && 
+        request.resource.data.winnerWallet == request.auth.uid;
+    }
+    
+    // Colección de logs de auditoría
+    match /audit_logs/{logId} {
+      allow read: if 
+        request.auth != null && 
+        request.auth.token.adminWallets.hasAny([
+          '3Yekte2UrR2rKFBfm3q6D2DyinZKN58svqJvQF87RX3o'
+        ]);
+      allow write: if true;  // Cualquiera puede escribir logs
+    }
+  }
+}
