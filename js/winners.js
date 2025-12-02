@@ -1,7 +1,41 @@
-// Gestión de ganadores
+// Gestión de ganadores - VeriRifa-Sol
+// Versión 2.0 - Con gestión mejorada de formularios y sincronización
+
 let winners = [];
 let currentPrizeToClaim = null;
 let currentShippingRaffle = null;
+let claimFormResetTimer = null;
+
+// ✅ NUEVO: Estado de formulario para mejor gestión
+const formState = {
+    name: '',
+    email: '',
+    phone: '',
+    address: '',
+    notes: '',
+    isValid: false
+};
+
+// ✅ NUEVO: Configuración de validación
+const validationRules = {
+    name: {
+        minLength: 2,
+        maxLength: 100,
+        pattern: /^[a-zA-ZáéíóúÁÉÍÓÚñÑ\s]+$/
+    },
+    email: {
+        pattern: /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+    },
+    phone: {
+        minLength: 9,
+        maxLength: 20,
+        pattern: /^[0-9+\s\-()]+$/
+    },
+    address: {
+        minLength: 10,
+        maxLength: 500
+    }
+};
 
 function renderWinnersArchive() {
     const winnersContainer = document.getElementById('winners-container');
@@ -24,16 +58,21 @@ function renderWinnersArchive() {
         const winnerDate = new Date(winner.winnerDate).toLocaleDateString('es-ES');
         const shortWallet = `${winner.winnerWallet.substring(0, 8)}...${winner.winnerWallet.substring(winner.winnerWallet.length - 4)}`;
 
+        // ✅ MEJORADO: Sanitizar datos antes de mostrar
+        const safePrize = sanitizeHTML(winner.prize);
+        const safeRaffleName = sanitizeHTML(winner.raffleName);
+        const safeWinnerInfo = winner.winnerInfo ? sanitizeHTML(winner.winnerInfo.name) : '';
+
         winnerCard.innerHTML = `
             <div class="winner-header">
-                <div class="winner-prize">${winner.prize}</div>
+                <div class="winner-prize">${safePrize}</div>
                 <div class="winner-date">${winnerDate}</div>
             </div>
             <div class="winner-details">
-                <div><strong>Sorteo:</strong> ${winner.raffleName}</div>
+                <div><strong>Sorteo:</strong> ${safeRaffleName}</div>
                 <div><strong>Número ganador:</strong> ${winner.winningNumber}</div>
                 <div><strong>Wallet:</strong> <span class="winner-wallet">${shortWallet}</span></div>
-                ${winner.winnerInfo ? `<div><strong>Ganador:</strong> ${winner.winnerInfo.name}</div>` : ''}
+                ${winner.winnerInfo ? `<div><strong>Ganador:</strong> ${safeWinnerInfo}</div>` : ''}
             </div>
         `;
 
@@ -60,6 +99,7 @@ function checkUserWinnings() {
     return userWinnings;
 }
 
+// ✅ MEJORADO: Función para abrir modal de reclamación con limpieza completa
 function openClaimPrizeModal(raffleId) {
     const raffle = raffles.find(r => r.id === raffleId);
     if (!raffle || !raffle.winner) return;
@@ -70,7 +110,16 @@ function openClaimPrizeModal(raffleId) {
         return;
     }
 
+    // ✅ NUEVO: Cancelar timer de reseteo si existe
+    if (claimFormResetTimer) {
+        clearTimeout(claimFormResetTimer);
+        claimFormResetTimer = null;
+    }
+
     currentPrizeToClaim = raffle;
+
+    // ✅ NUEVO: Restablecer estado del formulario
+    resetFormState();
 
     document.getElementById('prize-name').textContent = `Premio: ${raffle.prize}`;
     document.getElementById('claim-raffle-name').textContent = raffle.name;
@@ -78,24 +127,286 @@ function openClaimPrizeModal(raffleId) {
     document.getElementById('winner-wallet').textContent =
         `${currentWallet.publicKey.toString().substring(0, 8)}...${currentWallet.publicKey.toString().substring(currentWallet.publicKey.toString().length - 4)}`;
 
-    loadSavedContactInfo();
+    // ✅ MEJORADO: Limpieza completa del formulario
+    resetClaimForm();
 
     document.getElementById('claim-prize-modal').classList.add('active');
 }
 
-function loadSavedContactInfo() {
-    // Solo Firebase - no hay localStorage
-    document.getElementById('winner-email').value = '';
-    document.getElementById('winner-phone').value = '';
-    document.getElementById('winner-name').value = '';
-    document.getElementById('winner-address').value = '';
-    
-    // MEJORA: Limpiar validaciones
+// ✅ NUEVO: Función para restablecer estado del formulario
+function resetFormState() {
+    formState.name = '';
+    formState.email = '';
+    formState.phone = '';
+    formState.address = '';
+    formState.notes = '';
+    formState.isValid = false;
+}
+
+// ✅ MEJORADO: Función para limpiar completamente el formulario de reclamación
+function resetClaimForm() {
+    const formElements = [
+        'winner-name',
+        'winner-email',
+        'winner-phone',
+        'winner-address',
+        'winner-notes'
+    ];
+
+    formElements.forEach(id => {
+        const element = document.getElementById(id);
+        if (element) {
+            element.value = '';
+            element.classList.remove('success', 'error', 'validating');
+        }
+    });
+
+    // Limpiar mensajes de validación
     clearFormValidations();
+
+    // Restablecer botón de envío
+    const submitBtn = document.getElementById('submit-claim-btn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '✅ Enviar Información y Reclamar Premio';
+        submitBtn.classList.remove('btn-success', 'btn-disabled');
+        submitBtn.classList.add('btn-success');
+    }
+
+    // Ocultar estado de transacción
+    const claimStatus = document.getElementById('claim-status');
+    if (claimStatus) {
+        claimStatus.style.display = 'none';
+    }
+}
+
+// ✅ NUEVO: Función mejorada para cargar información guardada
+function loadSavedContactInfo() {
+    // Para VeriRifa-Sol, siempre empezamos con formulario limpio
+    resetClaimForm();
+    
+    // ✅ MEJORADO: Limpiar también el campo de notas que estaba causando el problema
+    const notesField = document.getElementById('winner-notes');
+    if (notesField) {
+        notesField.value = '';
+        notesField.classList.remove('success', 'error');
+    }
+    
+    // Limpiar validaciones
+    clearFormValidations();
+    
+    console.log('✅ Formulario de reclamación limpiado completamente');
+}
+
+// ✅ MEJORADO: Validación de formulario con real-time feedback
+function validateClaimForm() {
+    const name = document.getElementById('winner-name').value.trim();
+    const email = document.getElementById('winner-email').value.trim();
+    const phone = document.getElementById('winner-phone').value.trim();
+    const address = document.getElementById('winner-address').value.trim();
+    
+    let isValid = true;
+    
+    // Validar nombre
+    const nameValidation = document.getElementById('name-validation');
+    const nameField = document.getElementById('winner-name');
+    
+    if (!name || name.length < validationRules.name.minLength) {
+        nameField.classList.remove('success');
+        nameField.classList.add('error');
+        nameValidation.textContent = `El nombre debe tener al menos ${validationRules.name.minLength} caracteres`;
+        nameValidation.classList.add('show');
+        isValid = false;
+    } else if (name.length > validationRules.name.maxLength) {
+        nameField.classList.remove('success');
+        nameField.classList.add('error');
+        nameValidation.textContent = `El nombre no puede exceder ${validationRules.name.maxLength} caracteres`;
+        nameValidation.classList.add('show');
+        isValid = false;
+    } else if (!validationRules.name.pattern.test(name)) {
+        nameField.classList.remove('success');
+        nameField.classList.add('error');
+        nameValidation.textContent = 'El nombre solo puede contener letras y espacios';
+        nameValidation.classList.add('show');
+        isValid = false;
+    } else {
+        nameField.classList.remove('error');
+        nameField.classList.add('success');
+        nameValidation.classList.remove('show');
+    }
+    
+    // Validar email
+    const emailValidation = document.getElementById('email-validation');
+    const emailField = document.getElementById('winner-email');
+    
+    if (!email || !validationRules.email.pattern.test(email)) {
+        emailField.classList.remove('success');
+        emailField.classList.add('error');
+        emailValidation.textContent = 'Por favor, introduce un email válido';
+        emailValidation.classList.add('show');
+        isValid = false;
+    } else {
+        emailField.classList.remove('error');
+        emailField.classList.add('success');
+        emailValidation.classList.remove('show');
+    }
+    
+    // Validar teléfono
+    const phoneValidation = document.getElementById('phone-validation');
+    const phoneField = document.getElementById('winner-phone');
+    const cleanPhone = phone.replace(/\s/g, '');
+    
+    if (!phone || cleanPhone.length < validationRules.phone.minLength) {
+        phoneField.classList.remove('success');
+        phoneField.classList.add('error');
+        phoneValidation.textContent = `El teléfono debe tener al menos ${validationRules.phone.minLength} dígitos`;
+        phoneValidation.classList.add('show');
+        isValid = false;
+    } else if (cleanPhone.length > validationRules.phone.maxLength) {
+        phoneField.classList.remove('success');
+        phoneField.classList.add('error');
+        phoneValidation.textContent = `El teléfono no puede exceder ${validationRules.phone.maxLength} caracteres`;
+        phoneValidation.classList.add('show');
+        isValid = false;
+    } else if (!validationRules.phone.pattern.test(phone)) {
+        phoneField.classList.remove('success');
+        phoneField.classList.add('error');
+        phoneValidation.textContent = 'Formato de teléfono inválido';
+        phoneValidation.classList.add('show');
+        isValid = false;
+    } else {
+        phoneField.classList.remove('error');
+        phoneField.classList.add('success');
+        phoneValidation.classList.remove('show');
+    }
+    
+    // Validar dirección
+    const addressValidation = document.getElementById('address-validation');
+    const addressField = document.getElementById('winner-address');
+    
+    if (!address || address.length < validationRules.address.minLength) {
+        addressField.classList.remove('success');
+        addressField.classList.add('error');
+        addressValidation.textContent = `La dirección debe tener al menos ${validationRules.address.minLength} caracteres`;
+        addressValidation.classList.add('show');
+        isValid = false;
+    } else if (address.length > validationRules.address.maxLength) {
+        addressField.classList.remove('success');
+        addressField.classList.add('error');
+        addressValidation.textContent = `La dirección no puede exceder ${validationRules.address.maxLength} caracteres`;
+        addressValidation.classList.add('show');
+        isValid = false;
+    } else {
+        addressField.classList.remove('error');
+        addressField.classList.add('success');
+        addressValidation.classList.remove('show');
+    }
+    
+    // Actualizar estado del botón de envío
+    const submitBtn = document.getElementById('submit-claim-btn');
+    if (submitBtn) {
+        submitBtn.disabled = !isValid;
+        if (isValid) {
+            submitBtn.classList.remove('btn-disabled');
+            submitBtn.classList.add('btn-success');
+        } else {
+            submitBtn.classList.add('btn-disabled');
+            submitBtn.classList.remove('btn-success');
+        }
+    }
+    
+    // Guardar estado del formulario
+    formState.isValid = isValid;
+    formState.name = name;
+    formState.email = email;
+    formState.phone = phone;
+    formState.address = address;
+    
+    return isValid;
+}
+
+// ✅ NUEVO: Validación en tiempo real para cada campo
+function setupRealTimeValidation() {
+    const fields = ['winner-name', 'winner-email', 'winner-phone', 'winner-address'];
+    
+    fields.forEach(fieldId => {
+        const field = document.getElementById(fieldId);
+        if (field) {
+            // Eliminar listeners anteriores para evitar duplicados
+            field.removeEventListener('input', handleFieldValidation);
+            field.addEventListener('input', handleFieldValidation);
+            
+            // También validar al perder el foco
+            field.removeEventListener('blur', handleFieldValidation);
+            field.addEventListener('blur', handleFieldValidation);
+        }
+    });
+    
+    // Campo de notas (solo limpiar estilos)
+    const notesField = document.getElementById('winner-notes');
+    if (notesField) {
+        notesField.addEventListener('focus', function() {
+            this.classList.remove('error');
+        });
+    }
+}
+
+// ✅ NUEVO: Manejador de validación para campos individuales
+function handleFieldValidation(event) {
+    const field = event.target;
+    const fieldId = field.id;
+    const value = field.value.trim();
+    
+    // Remover estilos previos
+    field.classList.remove('success', 'error');
+    
+    // Validar según el campo
+    switch(fieldId) {
+        case 'winner-name':
+            if (value && value.length >= validationRules.name.minLength && 
+                value.length <= validationRules.name.maxLength && 
+                validationRules.name.pattern.test(value)) {
+                field.classList.add('success');
+            } else if (value) {
+                field.classList.add('error');
+            }
+            break;
+            
+        case 'winner-email':
+            if (value && validationRules.email.pattern.test(value)) {
+                field.classList.add('success');
+            } else if (value) {
+                field.classList.add('error');
+            }
+            break;
+            
+        case 'winner-phone':
+            const cleanPhone = value.replace(/\s/g, '');
+            if (value && cleanPhone.length >= validationRules.phone.minLength && 
+                cleanPhone.length <= validationRules.phone.maxLength && 
+                validationRules.phone.pattern.test(value)) {
+                field.classList.add('success');
+            } else if (value) {
+                field.classList.add('error');
+            }
+            break;
+            
+        case 'winner-address':
+            if (value && value.length >= validationRules.address.minLength && 
+                value.length <= validationRules.address.maxLength) {
+                field.classList.add('success');
+            } else if (value) {
+                field.classList.add('error');
+            }
+            break;
+    }
+    
+    // Validar formulario completo
+    validateClaimForm();
 }
 
 async function submitPrizeClaim() {
-    // MEJORA: Validar formulario antes de enviar
+    // Validar formulario antes de enviar
     if (!validateClaimForm()) {
         showUserAlert('Por favor, corrige los errores en el formulario', 'error');
         return;
@@ -118,8 +429,13 @@ async function submitPrizeClaim() {
     }
 
     showClaimStatus('⏳ Guardando información del ganador en Firebase...', 'info');
-    document.getElementById('submit-claim-btn').disabled = true;
-    document.getElementById('submit-claim-btn').textContent = '⏳ Guardando...';
+    
+    const submitBtn = document.getElementById('submit-claim-btn');
+    if (submitBtn) {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '⏳ Guardando...';
+        submitBtn.classList.add('btn-disabled');
+    }
 
     try {
         const claimData = {
@@ -139,7 +455,7 @@ async function submitPrizeClaim() {
             claimTimestamp: Date.now()
         };
 
-        // Guardar en Firebase en lugar de enviar email
+        // Guardar en Firebase
         const saved = await saveClaimToFirebase(claimData);
 
         if (saved) {
@@ -147,7 +463,7 @@ async function submitPrizeClaim() {
             currentPrizeToClaim.prizeClaimed = true;
             currentPrizeToClaim.claimDate = new Date().toISOString();
             currentPrizeToClaim.winnerInfo = claimData.winnerInfo;
-            currentPrizeToClaim.shippingStatus = 'claimed'; // MEJORA: Establecer estado inicial
+            currentPrizeToClaim.shippingStatus = 'claimed';
 
             // Guardar en Firebase
             await saveRafflesToFirebase();
@@ -162,15 +478,23 @@ async function submitPrizeClaim() {
                 'success'
             );
 
+            // Actualizar UI
             updateClaimButtons();
             renderRaffles();
-            // Actualizar la tabla de ganadores en admin
             loadWinnersAdminTable();
-
-            setTimeout(() => {
+            
+            // ✅ MEJORADO: Programar cierre automático con reset
+            claimFormResetTimer = setTimeout(() => {
                 closeClaimPrizeModal();
-                document.getElementById('submit-claim-btn').disabled = false;
-                document.getElementById('submit-claim-btn').textContent = '✅ Enviar Información y Reclamar Premio';
+                
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = '✅ Enviar Información y Reclamar Premio';
+                    submitBtn.classList.remove('btn-disabled');
+                }
+                
+                // Mostrar confirmación
+                showUserAlert(`🎉 ¡Premio reclamado exitosamente! Te contactaremos pronto.`, 'success');
             }, 5000);
 
         } else {
@@ -180,21 +504,33 @@ async function submitPrizeClaim() {
     } catch (error) {
         console.error('Error reclamando premio:', error);
         showClaimStatus(`❌ Error: ${error.message}`, 'error');
-        document.getElementById('submit-claim-btn').disabled = false;
-        document.getElementById('submit-claim-btn').textContent = '✅ Enviar Información y Reclamar Premio';
+        
+        if (submitBtn) {
+            submitBtn.disabled = false;
+            submitBtn.textContent = '✅ Enviar Información y Reclamar Premio';
+            submitBtn.classList.remove('btn-disabled');
+        }
+        
+        showUserAlert(`❌ Error al reclamar premio: ${error.message}`, 'error');
     }
 }
 
 function closeClaimPrizeModal() {
     document.getElementById('claim-prize-modal').classList.remove('active');
-    currentPrizeToClaim = null;
-
-    document.getElementById('submit-claim-btn').disabled = false;
-    document.getElementById('submit-claim-btn').textContent = '✅ Enviar Información y Reclamar Premio';
-    document.getElementById('claim-status').style.display = 'none';
     
-    // MEJORA: Limpiar validaciones al cerrar
-    clearFormValidations();
+    // ✅ NUEVO: Cancelar timer si existe
+    if (claimFormResetTimer) {
+        clearTimeout(claimFormResetTimer);
+        claimFormResetTimer = null;
+    }
+    
+    currentPrizeToClaim = null;
+    
+    // ✅ MEJORADO: Reset completo del formulario con pequeño delay
+    setTimeout(() => {
+        resetClaimForm();
+        resetFormState();
+    }, 300);
 }
 
 // FUNCIONES PARA LA TABLA DE GANADORES EN ADMIN
@@ -211,14 +547,14 @@ function loadWinnersAdminTable() {
     );
     
     if (claimedRaffles.length === 0) {
-        winnersTable.style.display = 'none';
-        noWinnersMessage.style.display = 'block';
+        if (winnersTable) winnersTable.style.display = 'none';
+        if (noWinnersMessage) noWinnersMessage.style.display = 'block';
         return;
     }
     
     // Aplicar filtros
-    const searchTerm = document.getElementById('winner-search').value.toLowerCase();
-    const statusFilter = document.getElementById('winner-status-filter').value;
+    const searchTerm = document.getElementById('winner-search')?.value.toLowerCase() || '';
+    const statusFilter = document.getElementById('winner-status-filter')?.value || 'all';
     
     const filteredRaffles = claimedRaffles.filter(raffle => {
         // Filtro de búsqueda
@@ -239,73 +575,77 @@ function loadWinnersAdminTable() {
     });
     
     if (filteredRaffles.length === 0) {
-        winnersTable.style.display = 'none';
-        noWinnersMessage.innerHTML = `
-            <h4>🔍 No se encontraron resultados</h4>
-            <p>No hay ganadores que coincidan con los criterios de búsqueda</p>
-        `;
-        noWinnersMessage.style.display = 'block';
+        if (winnersTable) winnersTable.style.display = 'none';
+        if (noWinnersMessage) {
+            noWinnersMessage.innerHTML = `
+                <h4>🔍 No se encontraron resultados</h4>
+                <p>No hay ganadores que coincidan con los criterios de búsqueda</p>
+            `;
+            noWinnersMessage.style.display = 'block';
+        }
         return;
     }
     
     // Generar filas de la tabla
-    winnersTbody.innerHTML = '';
-    filteredRaffles.forEach(raffle => {
-        const winnerInfo = raffle.winnerInfo;
-        const winnerDate = new Date(raffle.winner.date).toLocaleDateString('es-ES');
-        const shortWallet = `${raffle.winner.wallet.substring(0, 8)}...${raffle.winner.wallet.substring(raffle.winner.wallet.length - 4)}`;
-        const shippingStatus = raffle.shippingStatus || 'pending';
-        
-        // Determinar texto y clase del estado
-        let statusText, statusClass;
-        switch(shippingStatus) {
-            case 'claimed':
-                statusText = 'Reclamado';
-                statusClass = 'status-claimed';
-                break;
-            case 'shipped':
-                statusText = 'Enviado';
-                statusClass = 'status-shipped';
-                break;
-            case 'delivered':
-                statusText = 'Entregado';
-                statusClass = 'status-delivered';
-                break;
-            default:
-                statusText = 'Pendiente';
-                statusClass = 'status-pending';
-        }
-        
-        const row = document.createElement('tr');
-        row.innerHTML = `
-            <td>
-                <strong>${winnerInfo.name}</strong><br>
-                <small style="color: var(--gray);">${shortWallet}</small>
-            </td>
-            <td class="winner-contact-info">
-                <div>📧 ${winnerInfo.email}</div>
-                <div>📞 ${winnerInfo.phone}</div>
-                <div>🏠 ${winnerInfo.address.substring(0, 30)}...</div>
-                ${winnerInfo.notes ? `<div>📝 ${winnerInfo.notes.substring(0, 30)}...</div>` : ''}
-            </td>
-            <td>${raffle.prize}</td>
-            <td>${raffle.name}</td>
-            <td><strong>${raffle.winner.number}</strong></td>
-            <td>${winnerDate}</td>
-            <td>
-                <span class="winner-status-badge ${statusClass}">${statusText}</span>
-            </td>
-            <td class="winner-actions">
-                <button class="btn btn-info btn-small view-winner-details" data-raffle="${raffle.id}">👁️</button>
-                <button class="btn btn-warning btn-small update-shipping-status" data-raffle="${raffle.id}">📦</button>
-            </td>
-        `;
-        
-        winnersTbody.appendChild(row);
-    });
+    if (winnersTbody) {
+        winnersTbody.innerHTML = '';
+        filteredRaffles.forEach(raffle => {
+            const winnerInfo = raffle.winnerInfo;
+            const winnerDate = new Date(raffle.winner.date).toLocaleDateString('es-ES');
+            const shortWallet = `${raffle.winner.wallet.substring(0, 8)}...${raffle.winner.wallet.substring(raffle.winner.wallet.length - 4)}`;
+            const shippingStatus = raffle.shippingStatus || 'pending';
+            
+            // Determinar texto y clase del estado
+            let statusText, statusClass;
+            switch(shippingStatus) {
+                case 'claimed':
+                    statusText = 'Reclamado';
+                    statusClass = 'status-claimed';
+                    break;
+                case 'shipped':
+                    statusText = 'Enviado';
+                    statusClass = 'status-shipped';
+                    break;
+                case 'delivered':
+                    statusText = 'Entregado';
+                    statusClass = 'status-delivered';
+                    break;
+                default:
+                    statusText = 'Pendiente';
+                    statusClass = 'status-pending';
+            }
+            
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <strong>${sanitizeHTML(winnerInfo.name)}</strong><br>
+                    <small style="color: var(--gray);">${shortWallet}</small>
+                </td>
+                <td class="winner-contact-info">
+                    <div>📧 ${sanitizeHTML(winnerInfo.email)}</div>
+                    <div>📞 ${sanitizeHTML(winnerInfo.phone)}</div>
+                    <div>🏠 ${sanitizeHTML(winnerInfo.address.substring(0, 30))}...</div>
+                    ${winnerInfo.notes ? `<div>📝 ${sanitizeHTML(winnerInfo.notes.substring(0, 30))}...</div>` : ''}
+                </td>
+                <td>${sanitizeHTML(raffle.prize)}</td>
+                <td>${sanitizeHTML(raffle.name)}</td>
+                <td><strong>${raffle.winner.number}</strong></td>
+                <td>${winnerDate}</td>
+                <td>
+                    <span class="winner-status-badge ${statusClass}">${statusText}</span>
+                </td>
+                <td class="winner-actions">
+                    <button class="btn btn-info btn-small view-winner-details" data-raffle="${raffle.id}">👁️</button>
+                    <button class="btn btn-warning btn-small update-shipping-status" data-raffle="${raffle.id}">📦</button>
+                </td>
+            `;
+            
+            winnersTbody.appendChild(row);
+        });
+    }
     
-    winnersTable.style.display = 'table';
-    noWinnersMessage.style.display = 'none';
+    if (winnersTable) winnersTable.style.display = 'table';
+    if (noWinnersMessage) noWinnersMessage.style.display = 'none';
     
     // Agregar event listeners a los botones
     setupWinnerAdminButtons();
@@ -383,30 +723,30 @@ function showWinnerDetailsModal(raffleId) {
             <div class="local-info">
                 <h4>👤 Información Personal</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                    <div><strong>Nombre:</strong> ${winnerInfo.name}</div>
-                    <div><strong>Email:</strong> ${winnerInfo.email}</div>
-                    <div><strong>Teléfono:</strong> ${winnerInfo.phone}</div>
+                    <div><strong>Nombre:</strong> ${sanitizeHTML(winnerInfo.name)}</div>
+                    <div><strong>Email:</strong> ${sanitizeHTML(winnerInfo.email)}</div>
+                    <div><strong>Teléfono:</strong> ${sanitizeHTML(winnerInfo.phone)}</div>
                     <div><strong>Wallet:</strong> ${raffle.winner.wallet}</div>
                 </div>
             </div>
             
             <div class="local-info">
                 <h4>🏠 Dirección de Envío</h4>
-                <p>${winnerInfo.address.replace(/\n/g, '<br>')}</p>
+                <p>${sanitizeHTML(winnerInfo.address).replace(/\n/g, '<br>')}</p>
             </div>
             
             ${winnerInfo.notes ? `
             <div class="local-info">
                 <h4>📝 Notas Adicionales</h4>
-                <p>${winnerInfo.notes.replace(/\n/g, '<br>')}</p>
+                <p>${sanitizeHTML(winnerInfo.notes).replace(/\n/g, '<br>')}</p>
             </div>
             ` : ''}
             
             <div class="local-info">
                 <h4>🎯 Información del Premio</h4>
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
-                    <div><strong>Sorteo:</strong> ${raffle.name}</div>
-                    <div><strong>Premio:</strong> ${raffle.prize}</div>
+                    <div><strong>Sorteo:</strong> ${sanitizeHTML(raffle.name)}</div>
+                    <div><strong>Premio:</strong> ${sanitizeHTML(raffle.prize)}</div>
                     <div><strong>Número Ganador:</strong> ${raffle.winner.number}</div>
                     <div><strong>Fecha del Sorteo:</strong> ${new Date(raffle.winner.date).toLocaleDateString('es-ES')}</div>
                     <div><strong>Fecha de Reclamación:</strong> ${raffle.claimDate ? new Date(raffle.claimDate).toLocaleDateString('es-ES') : 'No disponible'}</div>
@@ -424,11 +764,14 @@ function showWinnerDetailsModal(raffleId) {
     `;
     
     // Agregar event listener para actualizar estado de envío
-    document.querySelector('.update-shipping-from-details').addEventListener('click', function() {
-        const raffleId = this.getAttribute('data-raffle');
-        modal.classList.remove('active');
-        openShippingStatusModal(raffleId);
-    });
+    const updateBtn = document.querySelector('.update-shipping-from-details');
+    if (updateBtn) {
+        updateBtn.addEventListener('click', function() {
+            const raffleId = this.getAttribute('data-raffle');
+            modal.classList.remove('active');
+            openShippingStatusModal(raffleId);
+        });
+    }
     
     modal.classList.add('active');
 }
@@ -489,46 +832,58 @@ function closeShippingStatusModal() {
 
 // Configurar event listeners para los filtros
 function setupWinnersAdminFilters() {
-    document.getElementById('winner-search').addEventListener('input', function() {
-        loadWinnersAdminTable();
-    });
+    const searchInput = document.getElementById('winner-search');
+    const statusFilter = document.getElementById('winner-status-filter');
+    const refreshBtn = document.getElementById('refresh-winners-btn');
     
-    document.getElementById('winner-status-filter').addEventListener('change', function() {
-        loadWinnersAdminTable();
-    });
+    if (searchInput) {
+        searchInput.addEventListener('input', function() {
+            loadWinnersAdminTable();
+        });
+    }
     
-    document.getElementById('refresh-winners-btn').addEventListener('click', function() {
-        loadWinnersAdminTable();
-        showUserAlert('🔄 Lista de ganadores actualizada', 'info');
-    });
+    if (statusFilter) {
+        statusFilter.addEventListener('change', function() {
+            loadWinnersAdminTable();
+        });
+    }
+    
+    if (refreshBtn) {
+        refreshBtn.addEventListener('click', function() {
+            loadWinnersAdminTable();
+            showUserAlert('🔄 Lista de ganadores actualizada', 'info');
+        });
+    }
 }
 
 // FUNCIÓN PARA EL BOTÓN "INFO GANADOR"
 function setupWinnerInfoButton() {
     const winnerInfoBtn = document.getElementById('winner-info-btn');
     
-    winnerInfoBtn.addEventListener('click', function() {
-        if (!currentWallet.publicKey) {
-            showUserAlert('🔗 Conecta tu wallet primero para ver información de ganador', 'warning');
-            return;
-        }
+    if (winnerInfoBtn) {
+        winnerInfoBtn.addEventListener('click', function() {
+            if (!currentWallet.publicKey) {
+                showUserAlert('🔗 Conecta tu wallet primero para ver información de ganador', 'warning');
+                return;
+            }
 
-        const userWinnings = checkUserWinnings();
-        const userAddress = currentWallet.publicKey.toString();
+            const userWinnings = checkUserWinnings();
+            const userAddress = currentWallet.publicKey.toString();
 
-        // Buscar todos los sorteos donde el usuario sea ganador
-        const userWinnerRaffles = raffles.filter(raffle => 
-            raffle.winner && raffle.winner.wallet === userAddress
-        );
+            // Buscar todos los sorteos donde el usuario sea ganador
+            const userWinnerRaffles = raffles.filter(raffle => 
+                raffle.winner && raffle.winner.wallet === userAddress
+            );
 
-        if (userWinnerRaffles.length === 0) {
-            // Mostrar información general si no es ganador
-            showWinnerInfoModal(null);
-        } else {
-            // Mostrar información específica si es ganador
-            showWinnerInfoModal(userWinnerRaffles);
-        }
-    });
+            if (userWinnerRaffles.length === 0) {
+                // Mostrar información general si no es ganador
+                showWinnerInfoModal(null);
+            } else {
+                // Mostrar información específica si es ganador
+                showWinnerInfoModal(userWinnerRaffles);
+            }
+        });
+    }
 }
 
 function showWinnerInfoModal(winnerRaffles) {
@@ -639,9 +994,9 @@ function showWinnerInfoModal(winnerRaffles) {
             const statusText = getShippingStatusText(shippingStatus);
             
             raffleCard.innerHTML = `
-                <h4>${raffle.name}</h4>
+                <h4>${sanitizeHTML(raffle.name)}</h4>
                 <div style="display: grid; grid-template-columns: 1fr; gap: 0.5rem; margin: 1rem 0;">
-                    <div><strong>Premio ganado:</strong> ${raffle.prize}</div>
+                    <div><strong>Premio ganado:</strong> ${sanitizeHTML(raffle.prize)}</div>
                     <div><strong>Número ganador:</strong> ${raffle.winner.number}</div>
                     <div><strong>Fecha del sorteo:</strong> ${new Date(raffle.winner.date).toLocaleDateString('es-ES')}</div>
                     <div><strong>Estado:</strong> <span class="winner-status-badge status-${shippingStatus}">${statusText}</span></div>
@@ -654,7 +1009,7 @@ function showWinnerInfoModal(winnerRaffles) {
                     <div style="background: rgba(20, 241, 149, 0.1); padding: 1rem; border-radius: 8px; text-align: center;">
                         <strong>${shippingStatus === 'delivered' ? '✅ Premio entregado' : '📦 Premio en proceso de envío'}</strong>
                         <p style="margin: 0.5rem 0 0 0; font-size: 0.9rem;">
-                            ${raffle.winnerInfo ? `Contacto: ${raffle.winnerInfo.name} - ${raffle.winnerInfo.email}` : 'Datos de envío confirmados'}
+                            ${raffle.winnerInfo ? `Contacto: ${sanitizeHTML(raffle.winnerInfo.name)} - ${sanitizeHTML(raffle.winnerInfo.email)}` : 'Datos de envío confirmados'}
                         </p>
                     </div>
                 `}
@@ -704,13 +1059,17 @@ function getUserParticipations() {
 
 // FUNCIÓN PARA VISUALIZAR TRANSACCIONES
 function setupTransactionsView() {
-    document.getElementById('view-transactions').addEventListener('click', function() {
-        if (!isAdmin) {
-            showUserAlert('❌ Solo el verificador puede ver las transacciones', 'error');
-            return;
-        }
-        showTransactionsModal();
-    });
+    const viewTransactionsBtn = document.getElementById('view-transactions');
+    
+    if (viewTransactionsBtn) {
+        viewTransactionsBtn.addEventListener('click', function() {
+            if (!isAdmin) {
+                showUserAlert('❌ Solo el verificador puede ver las transacciones', 'error');
+                return;
+            }
+            showTransactionsModal();
+        });
+    }
 }
 
 function showTransactionsModal() {
@@ -782,10 +1141,10 @@ function showTransactionsModal() {
                             </div>
                         </div>
                         <div class="transaction-details">
-                            <div><strong>Sorteo:</strong> ${transaction.raffleName}</div>
+                            <div><strong>Sorteo:</strong> ${sanitizeHTML(transaction.raffleName)}</div>
                             ${transaction.type === 'purchase' ? 
                                 `<div><strong>Números:</strong> ${transaction.numbers.join(', ')}</div>` :
-                                `<div><strong>Premio:</strong> ${transaction.prize}</div>`
+                                `<div><strong>Premio:</strong> ${sanitizeHTML(transaction.prize)}</div>`
                             }
                             <div><strong>Wallet:</strong> <span class="transaction-wallet">${transaction.userWallet.substring(0, 8)}...${transaction.userWallet.substring(transaction.userWallet.length - 4)}</span></div>
                             <div><strong>Estado:</strong> <span class="transaction-status-badge status-${transaction.status}">${transaction.status === 'confirmed' ? '✅ Confirmada' : (transaction.status === 'claimed' ? '🎉 Reclamado' : '⏳ Pendiente')}</span></div>
@@ -858,3 +1217,64 @@ function generateRandomWallet() {
     }
     return result;
 }
+
+// ✅ NUEVO: Inicializar módulo de ganadores
+function initWinnersModule() {
+    console.log('🎯 Módulo de ganadores inicializado');
+    
+    // Configurar validación en tiempo real
+    setupRealTimeValidation();
+    
+    // Configurar filtros de admin
+    setupWinnersAdminFilters();
+    
+    // Configurar botón de información de ganador
+    setupWinnerInfoButton();
+    
+    // Configurar vista de transacciones
+    setupTransactionsView();
+}
+
+// ✅ NUEVO: Función para limpiar formularios
+function clearFormValidations() {
+    document.querySelectorAll('.form-validation').forEach(validation => {
+        validation.classList.remove('show');
+    });
+    document.querySelectorAll('.form-control').forEach(input => {
+        input.classList.remove('error', 'success');
+    });
+}
+
+// ✅ NUEVO: Mostrar estado de reclamo
+function showClaimStatus(message, type = 'info') {
+    const claimStatus = document.getElementById('claim-status');
+    const claimDetails = document.getElementById('claim-details');
+
+    if (claimStatus) {
+        claimStatus.style.display = 'block';
+        
+        const sanitizedMessage = sanitizeHTML(message.replace(/\n/g, '<br>'));
+        claimDetails.innerHTML = sanitizedMessage;
+        
+        claimStatus.className = `transaction-status ${type === 'success' ? 'transaction-success' : ''} ${type === 'error' ? 'transaction-error' : ''}`;
+    }
+}
+
+// Inicializar cuando el DOM esté listo
+document.addEventListener('DOMContentLoaded', function() {
+    setTimeout(() => {
+        initWinnersModule();
+    }, 500);
+});
+
+// Exportar funciones para uso global
+window.openClaimPrizeModal = openClaimPrizeModal;
+window.closeClaimPrizeModal = closeClaimPrizeModal;
+window.submitPrizeClaim = submitPrizeClaim;
+window.updateShippingStatus = updateShippingStatus;
+window.closeShippingStatusModal = closeShippingStatusModal;
+window.showWinnerInfoModal = showWinnerInfoModal;
+window.showTransactionsModal = showTransactionsModal;
+window.clearFormValidations = clearFormValidations;
+window.validateClaimForm = validateClaimForm;
+window.resetClaimForm = resetClaimForm;
