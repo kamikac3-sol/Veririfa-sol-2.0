@@ -1,902 +1,555 @@
-// CONFIGURACIÓN MEJORADA DE FIREBASE - VeriRifa-Sol v2.0
-// Archivo: js/firebase.js
-
-// Configuración de seguridad
-const SECURITY_CONFIG = {
-  adminWallets: CONFIG.SECURITY.ADMIN_WALLETS,
-  maxNumbersPerPurchase: CONFIG.SECURITY.MAX_NUMBERS_PER_PURCHASE,
-  minTicketPrice: CONFIG.SECURITY.MIN_TICKET_PRICE,
-  maxTicketPrice: CONFIG.SECURITY.MAX_TICKET_PRICE,
-  rateLimits: CONFIG.SECURITY.RATE_LIMITS,
-  validation: CONFIG.SECURITY.VALIDATION
+// Configuración de Firebase - NUEVO PROYECTO: veririfa-sol-2
+const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyAXdc3j3btUiwItrFJZGvWrHJqhEae0_wU",
+    authDomain: "veririfa-sol-2.firebaseapp.com",
+    projectId: "veririfa-sol-2",
+    storageBucket: "veririfa-sol-2.firebasestorage.app",
+    messagingSenderId: "504444330864",
+    appId: "1:504444330864:web:abb0847510c5215295a5b5",
+    measurementId: "G-62F9LZN3DC"
 };
 
-// Sistema de rate limiting mejorado
-class RateLimiter {
-  constructor() {
-    this.store = new Map();
-    this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000); // Cada 5 minutos
-  }
-
-  checkLimit(key, maxAttempts, windowMs) {
-    const now = Date.now();
-    const windowStart = now - windowMs;
-    
-    if (!this.store.has(key)) {
-      this.store.set(key, []);
-    }
-    
-    const attempts = this.store.get(key);
-    const recentAttempts = attempts.filter(time => time > windowStart);
-    
-    if (recentAttempts.length >= maxAttempts) {
-      return false; // Límite excedido
-    }
-    
-    recentAttempts.push(now);
-    this.store.set(key, recentAttempts);
-    return true;
-  }
-
-  cleanup() {
-    const now = Date.now();
-    for (const [key, attempts] of this.store.entries()) {
-      const activeAttempts = attempts.filter(time => now - time < 3600000); // Mantener 1 hora
-      if (activeAttempts.length === 0) {
-        this.store.delete(key);
-      } else {
-        this.store.set(key, activeAttempts);
-      }
-    }
-  }
-
-  getRemainingTime(key, maxAttempts, windowMs) {
-    const now = Date.now();
-    const windowStart = now - windowMs;
-    
-    if (!this.store.has(key)) {
-      return 0;
-    }
-    
-    const attempts = this.store.get(key);
-    const recentAttempts = attempts.filter(time => time > windowStart);
-    const oldestAttempt = Math.min(...recentAttempts);
-    
-    return Math.max(0, windowMs - (now - oldestAttempt));
-  }
-}
-
-const rateLimiter = new RateLimiter();
-
-// Variables globales de Firebase
+// Inicializar Firebase
 let firebaseApp;
 let db;
 let analytics;
-let realtimeListeners = {
-  raffles: null,
-  winners: null,
-  claims: null,
-  auditLogs: null
-};
 
-// Inicialización mejorada de Firebase
-async function initializeFirebase() {
-  try {
-    console.log('🔥 Inicializando Firebase...');
-    
-    // Verificar si Firebase ya está inicializado
-    if (firebase.apps.length > 0) {
-      firebaseApp = firebase.apps[0];
-    } else {
-      firebaseApp = firebase.initializeApp(CONFIG.FIREBASE);
-    }
-    
-    // Inicializar servicios
+try {
+    firebaseApp = firebase.initializeApp(FIREBASE_CONFIG);
     db = firebase.firestore();
     analytics = firebase.analytics();
     
-    // Configuración específica para desarrollo
+    // Configuración para desarrollo
     if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") {
-      db.settings({
-        experimentalForceLongPolling: true,
-        ignoreUndefinedProperties: true
-      });
-      console.log("🔧 Modo desarrollo activado para Firebase");
+        db.settings({
+            experimentalForceLongPolling: true
+        });
+        console.log("🔧 Modo desarrollo activado para Firebase");
     }
     
-    // Configurar persistencia de caché offline
-    await db.enablePersistence()
-      .then(() => console.log("✅ Persistencia offline activada"))
-      .catch(err => {
-        if (err.code === 'failed-precondition') {
-          console.warn("⚠️ Persistencia offline no disponible: Múltiples pestañas abiertas");
-        } else if (err.code === 'unimplemented') {
-          console.warn("⚠️ Persistencia offline no soportada por el navegador");
-        }
-      });
+    console.log('✅ Firebase inicializado correctamente para veririfa-sol-2');
     
     // Verificar conexión
-    await verifyFirebaseConnection();
-    
-    console.log('✅ Firebase inicializado correctamente');
-    
-    // Registrar evento de analytics
-    logAnalyticsEvent('app_init', { 
-      version: CONFIG.VERSION,
-      network: CONFIG.NETWORK 
+    db.collection("raffles").limit(1).get().then(() => {
+        console.log("📡 Conexión a Firestore verificada");
+    }).catch(error => {
+        console.error("❌ Error conectando a Firestore:", error);
     });
     
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Error crítico inicializando Firebase:', error);
-    
-    // Mostrar error amigable al usuario
-    errorHandler.handleGlobalError(error, { 
-      source: 'firebase_init',
-      critical: true 
-    });
-    
-    showUserAlert(
-      '⚠️ No se puede conectar con el servidor. ' +
-      'Algunas funciones pueden no estar disponibles. ' +
-      'Por favor, verifica tu conexión a internet.',
-      'warning',
-      10000
-    );
-    
-    return false;
-  }
+} catch (error) {
+    console.error('❌ Error inicializando Firebase:', error);
+    showUserAlert('Error: No se puede conectar a la base de datos Firebase', 'error');
 }
 
-// Verificar conexión a Firebase
-async function verifyFirebaseConnection() {
-  try {
-    const startTime = Date.now();
-    await db.collection("raffles").limit(1).get();
-    const duration = Date.now() - startTime;
-    
-    console.log(`📡 Conexión a Firestore verificada: ${duration}ms`);
-    
-    // Log de conexión lenta
-    if (duration > 2000) {
-      console.warn(`⚠️ Conexión lenta a Firebase: ${duration}ms`);
-      logAuditEvent('slow_connection', { duration });
-    }
-    
-    return { success: true, latency: duration };
-    
-  } catch (error) {
-    console.error('❌ Error verificando conexión a Firestore:', error);
-    logAuditEvent('connection_failed', { error: error.message });
-    
-    throw error;
-  }
-}
-
-// Sistema de validación mejorado
-function validateRaffleData(raffleData, isAdmin) {
-  const errors = [];
-  const warnings = [];
-  
-  // Validar nombre
-  if (!raffleData.name || typeof raffleData.name !== 'string') {
-    errors.push('El nombre del sorteo es requerido');
-  } else if (raffleData.name.length < SECURITY_CONFIG.validation.minRaffleNameLength) {
-    errors.push(`El nombre debe tener al menos ${SECURITY_CONFIG.validation.minRaffleNameLength} caracteres`);
-  } else if (raffleData.name.length > SECURITY_CONFIG.validation.maxRaffleNameLength) {
-    errors.push(`El nombre no puede exceder ${SECURITY_CONFIG.validation.maxRaffleNameLength} caracteres`);
-  }
-  
-  // Validar precio
-  if (!raffleData.price || typeof raffleData.price !== 'number') {
-    errors.push('El precio es requerido');
-  } else if (raffleData.price < SECURITY_CONFIG.minTicketPrice) {
-    errors.push(`El precio mínimo es ${SECURITY_CONFIG.minTicketPrice} SOL`);
-  } else if (raffleData.price > SECURITY_CONFIG.maxTicketPrice) {
-    errors.push(`El precio máximo es ${SECURITY_CONFIG.maxTicketPrice} SOL`);
-  } else if (raffleData.price.toString().split('.')[1]?.length > 9) {
-    errors.push('El precio no puede tener más de 9 decimales');
-  }
-  
-  // Validar cantidad de números
-  if (!raffleData.totalNumbers || typeof raffleData.totalNumbers !== 'number') {
-    errors.push('La cantidad de números es requerida');
-  } else if (raffleData.totalNumbers < SECURITY_CONFIG.validation.minNumbersPerRaffle) {
-    errors.push(`Debe haber al menos ${SECURITY_CONFIG.validation.minNumbersPerRaffle} números`);
-  } else if (raffleData.totalNumbers > SECURITY_CONFIG.validation.maxNumbersPerRaffle) {
-    errors.push(`No puede haber más de ${SECURITY_CONFIG.validation.maxNumbersPerRaffle} números`);
-  } else if (!isAdmin && raffleData.totalNumbers > 100) {
-    errors.push('Solo administradores pueden crear sorteos con más de 100 números');
-  }
-  
-  // Validar imagen/emoji
-  if (!raffleData.image || typeof raffleData.image !== 'string') {
-    errors.push('La imagen o emoji es requerido');
-  } else if (raffleData.image.startsWith('http')) {
-    // Validar URL
-    try {
-      new URL(raffleData.image);
-    } catch (e) {
-      errors.push('La URL de la imagen no es válida');
-    }
-  } else if (raffleData.image.length > 10) {
-    warnings.push('El emoji parece muy largo. ¿Es correcto?');
-  }
-  
-  // Validar descripción
-  if (raffleData.description && raffleData.description.length > 1000) {
-    warnings.push('La descripción es muy larga (máximo 1000 caracteres)');
-  }
-  
-  return {
-    isValid: errors.length === 0,
-    errors,
-    warnings,
-    timestamp: new Date().toISOString()
-  };
-}
-
-// Validar compra de números
-function validatePurchase(raffle, numbers, userWallet, userBalance) {
-  const errors = [];
-  const validation = {
-    passed: true,
-    totalCost: 0,
-    availableNumbers: []
-  };
-  
-  // Verificar que la wallet esté conectada
-  if (!userWallet) {
-    errors.push('Wallet no conectada');
-    validation.passed = false;
-  }
-  
-  // Verificar que el sorteo exista y esté activo
-  if (!raffle || raffle.completed) {
-    errors.push('El sorteo no está disponible o ya ha finalizado');
-    validation.passed = false;
-  }
-  
-  // Verificar límite de números por compra
-  if (numbers.length > SECURITY_CONFIG.maxNumbersPerPurchase) {
-    errors.push(`No puedes comprar más de ${SECURITY_CONFIG.maxNumbersPerPurchase} números a la vez`);
-    validation.passed = false;
-  }
-  
-  // Verificar rate limiting
-  const rateLimitKey = `purchase_${userWallet}`;
-  if (!rateLimiter.checkLimit(rateLimitKey, 
-      SECURITY_CONFIG.rateLimits.purchases.max, 
-      SECURITY_CONFIG.rateLimits.purchases.windowMs)) {
-    
-    const remainingTime = rateLimiter.getRemainingTime(rateLimitKey, 
-      SECURITY_CONFIG.rateLimits.purchases.max, 
-      SECURITY_CONFIG.rateLimits.purchases.windowMs);
-    
-    errors.push(`Demasiadas compras recientemente. Espera ${Math.ceil(remainingTime / 1000)} segundos.`);
-    validation.passed = false;
-  }
-  
-  // Verificar números individualmente
-  numbers.forEach(number => {
-    // Verificar rango
-    if (number < 1 || number > raffle.totalNumbers) {
-      errors.push(`El número ${number} está fuera del rango válido (1-${raffle.totalNumbers})`);
-      validation.passed = false;
-      return;
-    }
-    
-    // Verificar disponibilidad
-    if (raffle.soldNumbers.includes(number) || raffle.numberOwners[number]) {
-      errors.push(`El número ${number} ya no está disponible`);
-      validation.passed = false;
-    } else {
-      validation.availableNumbers.push(number);
-    }
-  });
-  
-  // Calcular costo total
-  validation.totalCost = validation.availableNumbers.length * raffle.price;
-  
-  // Verificar saldo suficiente
-  if (userBalance < validation.totalCost) {
-    errors.push(`Saldo insuficiente. Necesitas ${validation.totalCost.toFixed(4)} SOL`);
-    validation.passed = false;
-  }
-  
-  // Verificar que haya al menos un número disponible
-  if (validation.availableNumbers.length === 0 && validation.passed) {
-    errors.push('No hay números disponibles para comprar');
-    validation.passed = false;
-  }
-  
-  return {
-    ...validation,
-    errors: errors.length > 0 ? errors : null,
-    warnings: validation.availableNumbers.length < numbers.length ? 
-      [`${numbers.length - validation.availableNumbers.length} números no estaban disponibles`] : []
-  };
-}
-
-// Función principal para guardar sorteos
+// Funciones de Firebase
 async function saveRafflesToFirebase() {
-  if (!db) {
-    errorHandler.handleGlobalError(new Error('Firebase no disponible'), { 
-      source: 'save_raffles',
-      critical: true 
-    });
-    return false;
-  }
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        showUserAlert('Error: No se puede conectar a la base de datos', 'error');
+        return false;
+    }
 
-  const batch = db.batch();
-  const updates = [];
-  
-  try {
-    // Validar cada sorteo antes de guardar
-    for (const raffle of raffles) {
-      const validation = validateRaffleData(raffle, isAdmin);
-      
-      if (!validation.isValid) {
-        throw new Error(`Sorteo inválido "${raffle.name}": ${validation.errors.join(', ')}`);
-      }
-      
-      if (validation.warnings.length > 0 && CONFIG.FEATURES.DEBUG_MODE) {
-        console.warn(`Advertencias para sorteo "${raffle.name}":`, validation.warnings);
-      }
-      
-      const raffleRef = db.collection('raffles').doc(raffle.id);
-      const raffleData = {
-        ...raffle,
-        validated: true,
-        validationTimestamp: firebase.firestore.FieldValue.serverTimestamp(),
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp(),
-        updatedBy: currentWallet?.publicKey?.toString() || 'system'
-      };
-      
-      batch.set(raffleRef, raffleData, { merge: true });
-      updates.push({ id: raffle.id, action: 'updated' });
+    try {
+        for (const raffle of raffles) {
+            await db.collection('raffles').doc(raffle.id).set({
+                ...raffle,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            }, { merge: true });
+        }
+        console.log('✅ Sorteos guardados en Firebase:', raffles.length);
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando sorteos en Firebase:', error);
+        showUserAlert('Error guardando datos en la nube', 'error');
+        return false;
     }
-    
-    // Ejecutar batch
-    await batch.commit();
-    
-    // Registrar en logs de auditoría
-    await logAuditEvent('raffles_batch_update', {
-      count: updates.length,
-      raffleIds: updates.map(u => u.id),
-      adminWallet: currentWallet?.publicKey?.toString()
-    });
-    
-    // Log de analytics
-    logAnalyticsEvent('raffles_saved', { count: updates.length });
-    
-    console.log(`✅ ${updates.length} sorteos guardados en Firebase`);
-    
-    if (CONFIG.FEATURES.DEBUG_MODE) {
-      console.log('📝 Updates:', updates);
-    }
-    
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Error guardando sorteos en Firebase:', error);
-    
-    await logAuditEvent('save_raffles_failed', {
-      error: error.message,
-      count: raffles.length,
-      adminWallet: currentWallet?.publicKey?.toString()
-    });
-    
-    errorHandler.handleGlobalError(error, {
-      source: 'save_raffles',
-      data: { count: raffles.length }
-    });
-    
-    return false;
-  }
 }
 
-// Función para cargar sorteos con caché
-async function loadRafflesFromFirebase() {
-  if (!db) {
-    console.error('❌ Firebase no disponible');
-    raffles = [];
-    errorHandler.handleGlobalError(new Error('Firebase no disponible'), { 
-      source: 'load_raffles',
-      critical: false 
-    });
-    return;
-  }
-
-  try {
-    const startTime = Date.now();
-    const snapshot = await db.collection('raffles').get();
-    const duration = Date.now() - startTime;
-    
-    if (!snapshot.empty) {
-      raffles = [];
-      snapshot.forEach(doc => {
-        const raffleData = doc.data();
-        
-        // Asegurar que los campos necesarios existan
-        const defaultRaffle = {
-          soldNumbers: [],
-          numberOwners: {},
-          winner: null,
-          prizeClaimed: false,
-          isSelectingWinner: false,
-          completed: false,
-          shippingStatus: 'pending',
-          createdAt: new Date().toISOString(),
-          validated: false,
-          lastUpdated: new Date().toISOString()
-        };
-        
-        // Combinar con valores por defecto
-        const processedRaffle = {
-          ...defaultRaffle,
-          ...raffleData,
-          id: doc.id // Mantener el ID del documento
-        };
-        
-        // Convertir Timestamp a string si es necesario
-        if (processedRaffle.createdAt?.toDate) {
-          processedRaffle.createdAt = processedRaffle.createdAt.toDate().toISOString();
-        }
-        
-        if (processedRaffle.lastUpdated?.toDate) {
-          processedRaffle.lastUpdated = processedRaffle.lastUpdated.toDate().toISOString();
-        }
-        
-        raffles.push(processedRaffle);
-      });
-      
-      console.log(`✅ ${raffles.length} sorteos cargados desde Firebase (${duration}ms)`);
-      
-      // Log de analytics
-      logAnalyticsEvent('raffles_loaded', { 
-        count: raffles.length, 
-        duration 
-      });
-      
-      // Actualizar caché
-      if (cacheManager && cacheManager.enabled) {
-        cacheManager.cacheRaffles(raffles);
-      }
-      
-    } else {
-      console.log('📝 No hay sorteos en Firebase');
-      raffles = [];
-    }
-    
-  } catch (error) {
-    console.error('❌ Error cargando sorteos desde Firebase:', error);
-    
-    errorHandler.handleGlobalError(error, {
-      source: 'load_raffles',
-      critical: false
-    });
-    
-    raffles = [];
-    
-    // Intentar cargar desde caché si hay error
-    if (cacheManager && cacheManager.enabled) {
-      const cachedRaffles = cacheManager.getCachedRaffles();
-      if (cachedRaffles && cachedRaffles.length > 0) {
-        console.log('🔄 Usando datos de caché debido a error de Firebase');
-        raffles = cachedRaffles;
-      }
-    }
-  }
-}
-
-// Transacción atómica para reservar números
+// ✅ NUEVA: Función de transacción atómica para reservar números
 async function reserveNumbersWithTransaction(raffleId, numbers, userWallet) {
-  if (!db) {
-    throw new Error('Firebase no disponible');
-  }
-
-  try {
-    const raffleRef = db.collection('raffles').doc(raffleId);
-    
-    return await db.runTransaction(async (transaction) => {
-      const raffleDoc = await transaction.get(raffleRef);
-      
-      if (!raffleDoc.exists) {
-        throw new Error('Sorteo no encontrado');
-      }
-      
-      const raffleData = raffleDoc.data();
-      const soldNumbers = raffleData.soldNumbers || [];
-      const numberOwners = raffleData.numberOwners || {};
-      
-      // Verificar disponibilidad de TODOS los números
-      const unavailableNumbers = numbers.filter(num => 
-        soldNumbers.includes(num) || numberOwners[num]
-      );
-      
-      if (unavailableNumbers.length > 0) {
-        throw new Error(`Números ${unavailableNumbers.join(', ')} ya no disponibles`);
-      }
-      
-      // Reservar números atómicamente
-      numbers.forEach(num => {
-        soldNumbers.push(num);
-        numberOwners[num] = userWallet;
-      });
-      
-      // Actualizar en transacción
-      transaction.update(raffleRef, {
-        soldNumbers: soldNumbers,
-        numberOwners: numberOwners,
-        lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
-      });
-      
-      // Registrar auditoría
-      logAuditEvent('numbers_reserved', {
-        raffleId,
-        numbers,
-        userWallet,
-        transaction: 'atomic'
-      }, userWallet);
-      
-      return { success: true, reservedNumbers: numbers };
-    });
-    
-  } catch (error) {
-    console.error('❌ Error en transacción de reserva:', error);
-    
-    logAuditEvent('reservation_failed', {
-      raffleId,
-      numbers,
-      userWallet,
-      error: error.message
-    }, userWallet);
-    
-    throw error;
-  }
-}
-
-// Sistema de logs de auditoría mejorado
-async function logAuditEvent(eventType, data, userWallet = null) {
-  if (!db) {
-    console.warn('Firebase no disponible para logging');
-    return false;
-  }
-
-  try {
-    const auditData = {
-      eventType,
-      data,
-      userWallet: userWallet || currentWallet?.publicKey?.toString() || 'system',
-      userAgent: navigator.userAgent,
-      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
-      metadata: {
-        version: CONFIG.VERSION,
-        url: window.location.href,
-        online: navigator.onLine
-      }
-    };
-    
-    await db.collection('audit_logs').add(auditData);
-    
-    if (CONFIG.FEATURES.DEBUG_MODE) {
-      console.log('📝 Evento de auditoría:', eventType, data);
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
     }
-    
-    return true;
-  } catch (error) {
-    console.error('❌ Error guardando log de auditoría:', error);
-    return false;
-  }
-}
 
-// Analytics mejorado
-function logAnalyticsEvent(eventName, eventParams = {}) {
-  if (!analytics) return;
-  
-  try {
-    const params = {
-      ...eventParams,
-      app_version: CONFIG.VERSION,
-      environment: CONFIG.FEATURES.DEBUG_MODE ? 'development' : 'production',
-      timestamp: new Date().toISOString()
-    };
-    
-    analytics.logEvent(eventName, params);
-    
-    if (CONFIG.FEATURES.DEBUG_MODE) {
-      console.log('📊 Analytics:', eventName, params);
+    try {
+        const raffleRef = db.collection('raffles').doc(raffleId);
+        
+        return await db.runTransaction(async (transaction) => {
+            const raffleDoc = await transaction.get(raffleRef);
+            
+            if (!raffleDoc.exists) {
+                throw new Error('Sorteo no encontrado');
+            }
+            
+            const raffleData = raffleDoc.data();
+            const soldNumbers = raffleData.soldNumbers || [];
+            const numberOwners = raffleData.numberOwners || {};
+            
+            // Verificar disponibilidad de TODOS los números
+            const unavailableNumbers = numbers.filter(num => 
+                soldNumbers.includes(num) || numberOwners[num]
+            );
+            
+            if (unavailableNumbers.length > 0) {
+                throw new Error(`Números ${unavailableNumbers.join(', ')} ya no disponibles`);
+            }
+            
+            // Reservar números atómicamente
+            numbers.forEach(num => {
+                soldNumbers.push(num);
+                numberOwners[num] = userWallet;
+            });
+            
+            // Actualizar en transacción
+            transaction.update(raffleRef, {
+                soldNumbers: soldNumbers,
+                numberOwners: numberOwners,
+                lastUpdated: firebase.firestore.FieldValue.serverTimestamp()
+            });
+            
+            return true;
+        });
+        
+    } catch (error) {
+        console.error('Error en transacción de reserva:', error);
+        throw error;
     }
-  } catch (error) {
-    console.warn('Error en analytics:', error);
-  }
 }
 
-// Sistema de listeners en tiempo real mejorado
+async function loadRafflesFromFirebase() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        raffles = [];
+        showUserAlert('Error: No se puede conectar a la base de datos', 'error');
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('raffles').get();
+        
+        if (!snapshot.empty) {
+            raffles = [];
+            snapshot.forEach(doc => {
+                const raffleData = doc.data();
+                
+                // Asegurar que los campos necesarios existan
+                if (!raffleData.soldNumbers) raffleData.soldNumbers = [];
+                if (!raffleData.numberOwners) raffleData.numberOwners = {};
+                if (!raffleData.winner) raffleData.winner = null;
+                if (raffleData.prizeClaimed === undefined) raffleData.prizeClaimed = false;
+                if (raffleData.completed === undefined) raffleData.completed = false;
+                if (!raffleData.shippingStatus) raffleData.shippingStatus = 'pending';
+                if (!raffleData.createdAt) raffleData.createdAt = new Date().toISOString();
+                
+                // Mantener el ID del documento
+                raffleData.id = doc.id;
+                
+                raffles.push(raffleData);
+            });
+            console.log('✅ Sorteos cargados desde Firebase:', raffles.length);
+        } else {
+            console.log('📝 No hay sorteos en Firebase');
+            raffles = [];
+        }
+    } catch (error) {
+        console.error('❌ Error cargando sorteos desde Firebase:', error);
+        raffles = [];
+        showUserAlert('Error cargando datos desde la nube', 'error');
+    }
+}
+
+async function loadWinnersFromFirebase() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        winners = [];
+        return;
+    }
+
+    try {
+        const snapshot = await db.collection('winners').orderBy('winnerDate', 'desc').get();
+        
+        if (!snapshot.empty) {
+            winners = [];
+            snapshot.forEach(doc => {
+                const winnerData = doc.data();
+                winnerData.id = doc.id;
+                winners.push(winnerData);
+            });
+            console.log('✅ Ganadores cargados desde Firebase:', winners.length);
+        } else {
+            console.log('📝 No hay ganadores en Firebase');
+            winners = [];
+        }
+    } catch (error) {
+        console.error('❌ Error cargando ganadores desde Firebase:', error);
+        winners = [];
+    }
+}
+
+async function saveWinnerToFirebase(winnerData) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('winners').add({
+            ...winnerData,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp()
+        });
+        console.log('✅ Ganador guardado en Firebase');
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando ganador en Firebase:', error);
+        return false;
+    }
+}
+
+async function saveClaimToFirebase(claimData) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('claims').add({
+            ...claimData,
+            timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+            status: 'pending',
+            processed: false
+        });
+        console.log('✅ Reclamación guardada en Firebase');
+        return true;
+    } catch (error) {
+        console.error('❌ Error guardando reclamación en Firebase:', error);
+        return false;
+    }
+}
+
+async function deleteRaffleFromFirebase(raffleId) {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return false;
+    }
+
+    try {
+        await db.collection('raffles').doc(raffleId).delete();
+        console.log('✅ Sorteo eliminado de Firebase:', raffleId);
+        return true;
+    } catch (error) {
+        console.error('❌ Error eliminando sorteo de Firebase:', error);
+        return false;
+    }
+}
+
+// Función para obtener estadísticas
+async function getFirebaseStats() {
+    if (!db) return null;
+
+    try {
+        const stats = {
+            totalRaffles: 0,
+            activeRaffles: 0,
+            completedRaffles: 0,
+            totalWinners: 0,
+            totalClaims: 0
+        };
+
+        // Contar sorteos
+        const rafflesSnapshot = await db.collection('raffles').get();
+        stats.totalRaffles = rafflesSnapshot.size;
+        
+        rafflesSnapshot.forEach(doc => {
+            const raffle = doc.data();
+            if (raffle.completed) {
+                stats.completedRaffles++;
+            } else {
+                stats.activeRaffles++;
+            }
+        });
+
+        // Contar ganadores
+        const winnersSnapshot = await db.collection('winners').get();
+        stats.totalWinners = winnersSnapshot.size;
+
+        // Contar reclamaciones
+        const claimsSnapshot = await db.collection('claims').get();
+        stats.totalClaims = claimsSnapshot.size;
+
+        console.log('📊 Estadísticas de Firebase:', stats);
+        return stats;
+    } catch (error) {
+        console.error('❌ Error obteniendo estadísticas de Firebase:', error);
+        return null;
+    }
+}
+
+// Función para limpiar datos de prueba (SOLO DESARROLLO)
+async function clearTestData() {
+    if (!db || !window.location.hostname.includes('localhost')) {
+        console.error('❌ Esta función solo está disponible en localhost');
+        return;
+    }
+
+    try {
+        // Eliminar todos los documentos de las colecciones
+        const collections = ['raffles', 'winners', 'claims'];
+        
+        for (const collectionName of collections) {
+            const snapshot = await db.collection(collectionName).get();
+            const batch = db.batch();
+            
+            snapshot.docs.forEach(doc => {
+                batch.delete(doc.ref);
+            });
+            
+            await batch.commit();
+            console.log(`✅ Datos de ${collectionName} eliminados`);
+        }
+        
+        showUserAlert('✅ Datos de prueba eliminados', 'success');
+    } catch (error) {
+        console.error('❌ Error eliminando datos de prueba:', error);
+        showUserAlert('Error eliminando datos de prueba', 'error');
+    }
+}
+
+// Función para exportar datos
+async function exportFirebaseData() {
+    if (!db) return null;
+
+    try {
+        const exportData = {
+            raffles: [],
+            winners: [],
+            claims: [],
+            exportDate: new Date().toISOString(),
+            project: 'veririfa-sol-2'
+        };
+
+        // Obtener sorteos
+        const rafflesSnapshot = await db.collection('raffles').get();
+        rafflesSnapshot.forEach(doc => {
+            exportData.raffles.push(doc.data());
+        });
+
+        // Obtener ganadores
+        const winnersSnapshot = await db.collection('winners').get();
+        winnersSnapshot.forEach(doc => {
+            exportData.winners.push(doc.data());
+        });
+
+        // Obtener reclamaciones
+        const claimsSnapshot = await db.collection('claims').get();
+        claimsSnapshot.forEach(doc => {
+            exportData.claims.push(doc.data());
+        });
+
+        console.log('📤 Datos exportados de Firebase:', exportData);
+        return exportData;
+    } catch (error) {
+        console.error('❌ Error exportando datos de Firebase:', error);
+        return null;
+    }
+}
+
+// ✅ NUEVO: Configurar listeners en tiempo real para sorteos
 function setupRafflesRealTimeListener() {
-  if (!db || realtimeListeners.raffles) return;
-  
-  try {
-    realtimeListeners.raffles = db.collection('raffles')
-      .onSnapshot((snapshot) => {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return;
+    }
+
+    // Escuchar cambios en tiempo real en todos los sorteos
+    db.collection('raffles').onSnapshot((snapshot) => {
         console.log('🔄 Actualización en tiempo real de sorteos recibida');
         
         const updatedRaffles = [];
-        const changes = {
-          added: 0,
-          modified: 0,
-          removed: 0
-        };
-        
-        snapshot.docChanges().forEach(change => {
-          changes[change.type]++;
-          
-          const raffleData = change.doc.data();
-          raffleData.id = change.doc.id;
-          
-          // Procesar datos
-          const processedRaffle = processRaffleData(raffleData);
-          
-          if (change.type === 'added' || change.type === 'modified') {
-            updatedRaffles.push(processedRaffle);
-          }
+        snapshot.forEach(doc => {
+            const raffleData = doc.data();
+            
+            // Asegurar que los campos necesarios existan
+            if (!raffleData.soldNumbers) raffleData.soldNumbers = [];
+            if (!raffleData.numberOwners) raffleData.numberOwners = {};
+            if (!raffleData.winner) raffleData.winner = null;
+            if (raffleData.prizeClaimed === undefined) raffleData.prizeClaimed = false;
+            if (raffleData.completed === undefined) raffleData.completed = false;
+            if (!raffleData.shippingStatus) raffleData.shippingStatus = 'pending';
+            if (!raffleData.createdAt) raffleData.createdAt = new Date().toISOString();
+            
+            // Mantener el ID del documento
+            raffleData.id = doc.id;
+            
+            updatedRaffles.push(raffleData);
         });
         
-        // Actualizar array global
+        // Actualizar el array global de sorteos
         raffles = updatedRaffles;
         
-        // Actualizar caché
-        if (cacheManager && cacheManager.enabled) {
-          cacheManager.cacheRaffles(raffles);
-        }
-        
-        // Re-renderizar UI
+        // Re-renderizar la interfaz de usuario
         renderRaffles();
         updateClaimButtons();
         
-        // Actualizar modal de selección si está abierto
-        if (currentRaffle && document.getElementById('number-selection-modal').classList.contains('active')) {
-          const updatedCurrentRaffle = raffles.find(r => r.id === currentRaffle.id);
-          if (updatedCurrentRaffle) {
-            currentRaffle = updatedCurrentRaffle;
-            renderNumbersGrid();
-            updateSelectionUI();
-          }
+        // Si estamos en el modal de selección de números, actualizar la cuadrícula
+        if (currentRaffle) {
+            // Encontrar el sorteo actualizado
+            const updatedCurrentRaffle = raffles.find(r => r.id === currentRaffle.id);
+            if (updatedCurrentRaffle) {
+                currentRaffle = updatedCurrentRaffle;
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
         }
         
-        // Log de cambios
-        if (CONFIG.FEATURES.DEBUG_MODE && (changes.added > 0 || changes.modified > 0)) {
-          console.log(`📊 Cambios en tiempo real: +${changes.added} ~${changes.modified} -${changes.removed}`);
+        console.log('✅ Sorteos actualizados en tiempo real:', raffles.length);
+        
+        // Si estamos en el panel admin, actualizar también
+        if (isAdmin && document.getElementById('admin-panel').classList.contains('active')) {
+            renderCompletedRaffles();
+            loadWinnersAdminTable();
         }
         
-      }, (error) => {
+    }, (error) => {
         console.error('❌ Error en listener de sorteos:', error);
+    });
+}
+
+// ✅ NUEVO: Configurar listeners en tiempo real para ganadores
+function setupWinnersRealTimeListener() {
+    if (!db) {
+        console.error('❌ Firebase no disponible');
+        return;
+    }
+
+    db.collection('winners').orderBy('winnerDate', 'desc').onSnapshot((snapshot) => {
+        console.log('🔄 Actualización en tiempo real de ganadores recibida');
         
-        errorHandler.handleGlobalError(error, {
-          source: 'realtime_listener',
-          type: 'raffles'
+        const updatedWinners = [];
+        snapshot.forEach(doc => {
+            const winnerData = doc.data();
+            winnerData.id = doc.id;
+            updatedWinners.push(winnerData);
         });
         
-        // Intentar reconectar después de 5 segundos
-        setTimeout(() => {
-          if (db) {
-            setupRafflesRealTimeListener();
-          }
-        }, 5000);
-      });
-    
-    console.log('✅ Listener de sorteos en tiempo real activado');
-    
-  } catch (error) {
-    console.error('❌ Error activando listener de sorteos:', error);
-  }
+        winners = updatedWinners;
+        renderWinnersArchive();
+        
+        console.log('✅ Ganadores actualizados en tiempo real:', winners.length);
+    }, (error) => {
+        console.error('❌ Error en listener de ganadores:', error);
+    });
 }
 
-// Procesar datos del sorteo
-function processRaffleData(raffleData) {
-  const defaults = {
-    soldNumbers: [],
-    numberOwners: {},
-    winner: null,
-    prizeClaimed: false,
-    isSelectingWinner: false,
-    completed: false,
-    shippingStatus: 'pending',
-    validated: false
-  };
-  
-  // Combinar con valores por defecto
-  const processed = { ...defaults, ...raffleData };
-  
-  // Convertir Timestamps
-  if (processed.createdAt?.toDate) {
-    processed.createdAt = processed.createdAt.toDate().toISOString();
-  }
-  
-  if (processed.lastUpdated?.toDate) {
-    processed.lastUpdated = processed.lastUpdated.toDate().toISOString();
-  }
-  
-  if (processed.winner?.date?.toDate) {
-    processed.winner.date = processed.winner.date.toDate().toISOString();
-  }
-  
-  return processed;
+// ✅ NUEVO: Escuchar reclamaciones en tiempo real
+function setupClaimsRealTimeListener() {
+    if (!db) return;
+    
+    db.collection('claims').orderBy('claimDate', 'desc').onSnapshot((snapshot) => {
+        console.log('🔄 Actualización en tiempo real de reclamaciones recibida');
+        
+        // Actualizar la tabla de admin si está visible
+        if (isAdmin && document.getElementById('admin-panel').classList.contains('active')) {
+            loadWinnersAdminTable();
+        }
+    });
 }
 
-// Inicializar todos los listeners en tiempo real
+// ✅ NUEVO: Gestión de sincronización en tiempo real
+let realtimeSync = {
+    raffles: false,
+    winners: false,
+    claims: false
+};
+
+// ✅ NUEVO: Inicializar todos los listeners en tiempo real
 async function initRealtimeSync() {
-  if (!db) {
-    console.error('❌ Firebase no disponible para sincronización');
-    return false;
-  }
-  
-  try {
     console.log('🔄 Iniciando sincronización en tiempo real...');
     
-    // Activar listeners
-    setupRafflesRealTimeListener();
-    setupWinnersRealTimeListener();
-    setupClaimsRealTimeListener();
-    
-    // Verificar estado de conexión
-    const connection = await verifyFirebaseConnection();
-    
-    console.log('✅ Sincronización en tiempo real activada');
-    
-    // Registrar evento
-    logAnalyticsEvent('realtime_sync_started', {
-      latency: connection.latency,
-      success: connection.success
-    });
-    
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Error iniciando sincronización en tiempo real:', error);
-    
-    errorHandler.handleGlobalError(error, {
-      source: 'init_realtime_sync',
-      critical: false
-    });
-    
-    return false;
-  }
+    try {
+        // Configurar listeners
+        setupRafflesRealTimeListener();
+        setupWinnersRealTimeListener();
+        setupClaimsRealTimeListener();
+        
+        realtimeSync = {
+            raffles: true,
+            winners: true,
+            claims: true
+        };
+        
+        console.log('✅ Sincronización en tiempo real activada');
+        return true;
+    } catch (error) {
+        console.error('❌ Error iniciando sincronización en tiempo real:', error);
+        return false;
+    }
 }
 
-// Función para forzar resincronización
-async function forceResync() {
-  console.log('🔄 Forzando resincronización completa...');
-  
-  try {
-    // Mostrar indicador de carga
-    showLoadingOverlay('Resincronizando datos...');
+// ✅ NUEVO: Verificar estado de sincronización
+function checkRealtimeStatus() {
+    const status = {
+        raffles: realtimeSync.raffles ? '🟢 Conectado' : '🔴 Desconectado',
+        winners: realtimeSync.winners ? '🟢 Conectado' : '🔴 Desconectado',
+        claims: realtimeSync.claims ? '🟢 Conectado' : '🔴 Desconectado'
+    };
     
-    // 1. Recargar datos desde Firebase
+    return status;
+}
+
+// ✅ NUEVO: Forzar resincronización
+async function forceResync() {
+    console.log('🔄 Forzando resincronización...');
+    
+    // Recargar datos desde Firebase
     await loadRafflesFromFirebase();
     await loadWinnersFromFirebase();
     
-    // 2. Actualizar caché
-    if (cacheManager && cacheManager.enabled) {
-      cacheManager.cacheRaffles(raffles);
-      cacheManager.cacheWinners(winners);
-    }
-    
-    // 3. Re-renderizar todo
+    // Re-renderizar todo
     renderRaffles();
     renderWinnersArchive();
     updateClaimButtons();
     
-    // 4. Actualizar sorteo actual si está en modal
     if (currentRaffle) {
-      const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
-      if (updatedRaffle) {
-        currentRaffle = updatedRaffle;
-        
-        if (document.getElementById('number-selection-modal').classList.contains('active')) {
-          renderNumbersGrid();
-          updateSelectionUI();
+        const updatedRaffle = raffles.find(r => r.id === currentRaffle.id);
+        if (updatedRaffle) {
+            currentRaffle = updatedRaffle;
+            
+            if (document.getElementById('number-selection-modal').classList.contains('active')) {
+                renderNumbersGrid();
+                updateSelectionUI();
+            }
         }
-      }
     }
-    
-    // 5. Ocultar indicador
-    hideLoadingOverlay();
     
     console.log('✅ Resincronización completada');
-    
     showUserAlert('✅ Datos resincronizados correctamente', 'success');
-    
-    return true;
-    
-  } catch (error) {
-    console.error('❌ Error en resincronización:', error);
-    hideLoadingOverlay();
-    
-    errorHandler.handleGlobalError(error, {
-      source: 'force_resync',
-      critical: false
+}
+
+// ✅ NUEVO: Manejo de desconexión/reconexión
+function setupRealtimeConnectionHandlers() {
+    // Detectar cambios en conexión a internet
+    window.addEventListener('online', () => {
+        console.log('🌐 Conexión a internet restablecida');
+        forceResync();
     });
     
-    showUserAlert('❌ Error al resincronizar datos', 'error');
-    
-    return false;
-  }
+    window.addEventListener('offline', () => {
+        console.log('🌐 Sin conexión a internet');
+        showUserAlert('⚠️ Sin conexión a internet. Los datos pueden no estar actualizados.', 'warning', 0);
+    });
 }
-
-// Verificar estado de sincronización
-function checkRealtimeStatus() {
-  return {
-    raffles: !!realtimeListeners.raffles,
-    winners: !!realtimeListeners.winners,
-    claims: !!realtimeListeners.claims,
-    connected: !!db,
-    lastSync: new Date().toISOString()
-  };
-}
-
-// Configurar manejo de conexión/desconexión
-function setupRealtimeConnectionHandlers() {
-  // Detectar cambios en conexión a internet
-  window.addEventListener('online', () => {
-    console.log('🌐 Conexión a internet restablecida');
-    
-    showUserAlert('✅ Conexión a internet restablecida', 'success', 3000);
-    
-    // Intentar reconectar Firebase
-    if (!db) {
-      initializeFirebase();
-    }
-    
-    // Forzar resincronización
-    setTimeout(() => {
-      forceResync();
-    }, 2000);
-  });
-  
-  window.addEventListener('offline', () => {
-    console.log('🌐 Sin conexión a internet');
-    
-    showUserAlert('⚠️ Sin conexión a internet. Los datos pueden no estar actualizados.', 'warning', 0);
-    
-    // Registrar evento
-    logAuditEvent('network_offline', { timestamp: new Date().toISOString() });
-  });
-}
-
-// Inicializar cuando se carga el DOM
-document.addEventListener('DOMContentLoaded', async () => {
-  // Inicializar Firebase
-  const firebaseInitialized = await initializeFirebase();
-  
-  if (firebaseInitialized) {
-    // Precargar datos críticos
-    await preloadCriticalData();
-    
-    // Inicializar sincronización en tiempo real
-    if (CONFIG.FEATURES.REALTIME_SYNC) {
-      await initRealtimeSync();
-    }
-    
-    // Configurar manejadores de conexión
-    setupRealtimeConnectionHandlers();
-  }
-});
 
 // Exportar funciones para uso global
 window.db = db;
 window.firebaseApp = firebaseApp;
-window.initializeFirebase = initializeFirebase;
-window.saveRafflesToFirebase = withErrorHandling(saveRafflesToFirebase);
-window.loadRafflesFromFirebase = withErrorHandling(loadRafflesFromFirebase);
-window.reserveNumbersWithTransaction = withErrorHandling(reserveNumbersWithTransaction);
-window.validatePurchase = validatePurchase;
-window.logAuditEvent = logAuditEvent;
+window.getFirebaseStats = getFirebaseStats;
+window.exportFirebaseData = exportFirebaseData;
+window.clearTestData = clearTestData;
+window.reserveNumbersWithTransaction = reserveNumbersWithTransaction;
 window.initRealtimeSync = initRealtimeSync;
 window.checkRealtimeStatus = checkRealtimeStatus;
-window.forceResync = withErrorHandling(forceResync);
+window.forceResync = forceResync;
 window.setupRealtimeConnectionHandlers = setupRealtimeConnectionHandlers;
 
-console.log('🔥 Firebase.js mejorado cargado completamente');
+console.log('🔥 Firebase.js cargado completamente para veririfa-sol-2 con sincronización en tiempo real');
